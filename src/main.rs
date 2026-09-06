@@ -32,7 +32,7 @@ Usage:\n\
   adamantium --version\n\n\
 PROJECT_DIRECTORY defaults to the current directory.\n\
 For compatibility, `adamantium PROJECT_DIRECTORY` is the same as `adamantium build PROJECT_DIRECTORY`.\n\
-Building requires NASM and the Visual Studio x64 Native Tools environment.\n\
+Building requires NASM and Visual Studio C++ build tools.\n\
 Override tools with ADAMANTIUM_NASM and ADAMANTIUM_LINKER.";
 
 enum Action {
@@ -205,26 +205,102 @@ fn build(root: &Path) -> Result<PathBuf, String> {
             .arg(&obj),
         "NASM",
     )?;
-    let linker = env::var_os("ADAMANTIUM_LINKER").unwrap_or_else(|| "link.exe".into());
-    execute(
-        Command::new(linker)
-            .args([
-                "/nologo",
-                "/machine:x64",
-                "/subsystem:console",
-                "/dynamicbase",
-                "/nxcompat",
-            ])
-            .arg(format!("/out:{}", exe.display()))
-            .arg(&obj)
-            .arg(&runtime)
-            .args(
-                include_str!(concat!(env!("OUT_DIR"), "/runtime-libraries.txt")).split_whitespace(),
-            )
-            .arg("kernel32.lib"),
-        "Microsoft linker (run from an x64 Native Tools Command Prompt for Visual Studio)",
-    )?;
+    link(&target, name, &obj, &runtime, &exe)?;
     Ok(exe)
+}
+
+fn link(target: &Path, name: &str, obj: &Path, runtime: &Path, exe: &Path) -> Result<(), String> {
+    let mut arguments = vec![
+        OsString::from("/nologo"),
+        OsString::from("/machine:x64"),
+        OsString::from("/subsystem:console"),
+        OsString::from("/dynamicbase"),
+        OsString::from("/nxcompat"),
+        format!("/out:{}", exe.display()).into(),
+        obj.as_os_str().into(),
+        runtime.as_os_str().into(),
+    ];
+    arguments.extend(
+        include_str!(concat!(env!("OUT_DIR"), "/runtime-libraries.txt"))
+            .split_whitespace()
+            .map(OsString::from),
+    );
+    arguments.push("kernel32.lib".into());
+
+    if let Some(linker) = env::var_os("ADAMANTIUM_LINKER") {
+        return execute(
+            Command::new(linker).args(&arguments),
+            "Microsoft linker configured by ADAMANTIUM_LINKER",
+        );
+    }
+    if env::var_os("VSCMD_ARG_TGT_ARCH").is_some() {
+        return execute(
+            Command::new("link.exe").args(&arguments),
+            "Microsoft linker",
+        );
+    }
+
+    let vcvars = find_vcvars64().ok_or(
+        "could not find Visual Studio C++ build tools; install the MSVC x64 tools or run from an x64 Native Tools Command Prompt",
+    )?;
+    let response = target.join(format!("{name}.link.rsp"));
+    let response_text = arguments
+        .iter()
+        .map(|argument| format!("\"{}\"", argument.to_string_lossy().replace('"', "\\\"")))
+        .collect::<Vec<_>>()
+        .join("\n");
+    fs::write(&response, response_text).map_err(|e| format!("{}: {e}", response.display()))?;
+    execute(
+        Command::new("cmd.exe")
+            .args(["/d", "/c", "call"])
+            .arg(&vcvars)
+            .args([">", "nul", "&&", "link.exe"])
+            .arg(format!("@{}", response.display())),
+        "Microsoft linker through the Visual Studio x64 environment",
+    )
+}
+
+fn find_vcvars64() -> Option<PathBuf> {
+    let program_files_x86 = env::var_os("ProgramFiles(x86)")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(r"C:\Program Files (x86)"));
+    let vswhere = program_files_x86.join("Microsoft Visual Studio/Installer/vswhere.exe");
+    if let Ok(output) = Command::new(vswhere)
+        .args([
+            "-latest",
+            "-products",
+            "*",
+            "-requires",
+            "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+            "-property",
+            "installationPath",
+        ])
+        .output()
+        && output.status.success()
+        && let Ok(installation) = String::from_utf8(output.stdout)
+    {
+        let candidate = PathBuf::from(installation.trim()).join("VC/Auxiliary/Build/vcvars64.bat");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+
+    let program_files = env::var_os("ProgramFiles")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(r"C:\Program Files"));
+    for year in ["2022", "2019"] {
+        for edition in ["Community", "Professional", "Enterprise", "BuildTools"] {
+            let candidate = program_files
+                .join("Microsoft Visual Studio")
+                .join(year)
+                .join(edition)
+                .join("VC/Auxiliary/Build/vcvars64.bat");
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
 }
 
 fn read_toml(path: &Path) -> Result<toml::Table, String> {

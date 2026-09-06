@@ -10,7 +10,7 @@ use std::{
 static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[test]
-#[ignore = "requires NASM and the Visual Studio x64 developer environment"]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_warnings_do_not_block_builds() {
     let project = Project::new(
         "fun main() { var unused = 1; print.newline(value()); } fun value() r:int { r = 7; return r; print.newline(999); } fun unused_function() r:None {}",
@@ -33,7 +33,7 @@ fn native_warnings_do_not_block_builds() {
 }
 
 #[test]
-#[ignore = "requires NASM and the Visual Studio x64 developer environment"]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_all_types_and_typed_calls() {
     let output = Project::new(
         r#"
@@ -111,7 +111,7 @@ fn native_all_types_and_typed_calls() {
 }
 
 #[test]
-#[ignore = "requires NASM and the Visual Studio x64 developer environment"]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_static_and_changeable_variables() {
     let output = Project::new(
         r#"
@@ -168,7 +168,7 @@ impl Drop for Project {
 }
 
 #[test]
-#[ignore = "requires NASM and the Visual Studio x64 developer environment"]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_arithmetic_clamp_calls_and_returns() {
     let project = Project::new(
         r#"
@@ -223,7 +223,7 @@ fn native_arithmetic_clamp_calls_and_returns() {
 }
 
 #[test]
-#[ignore = "requires NASM and the Visual Studio x64 developer environment"]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_runtime_errors_are_reported() {
     for body in [
         "print.newline(1/0);",
@@ -251,7 +251,7 @@ fn native_runtime_errors_are_reported() {
 }
 
 #[test]
-#[ignore = "requires NASM and the Visual Studio x64 developer environment"]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_empty_function_and_large_stack_frame() {
     assert!(Project::new("fun main() {}").run().status.success());
     let mut source = String::from("fun main() {");

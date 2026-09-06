@@ -11,8 +11,7 @@ and builds a native Windows x64 console executable.
 
 ## Usage
 
-Install the CLI from the `compiler` directory using an **x64 Native Tools
-Command Prompt for VS 2022**:
+Install the CLI from the `compiler` directory:
 
 ```bat
 cargo install --path .
@@ -34,11 +33,13 @@ directory. `adamantium PROJECT_DIRECTORY` remains an alias for
 The compiler reads `code/main.ad`, `project.toml` and `requirement.toml`
 from the project directory. It writes `<name>.asm`, `<name>.obj` and
 `<name>.exe` into that project's `target` directory, where `name` comes
-from `project.toml`.
+from `project.toml`. On Windows, the compiler finds Visual Studio with
+`vswhere` and configures the x64 linker automatically, so these commands work
+from regular PowerShell and Command Prompt sessions.
 
 Set `ADAMANTIUM_NASM` or `ADAMANTIUM_LINKER` to override a tool's executable
-path. The linker must support Microsoft LINK arguments and have access to
-`kernel32.lib` through the Visual Studio developer environment.
+path. A custom linker must support Microsoft LINK arguments and have access to
+`kernel32.lib` through its environment.
 
 ## Supported syntax
 
