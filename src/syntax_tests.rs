@@ -1,6 +1,57 @@
 use super::*;
 
 #[test]
+fn rejects_invalid_access_with_specific_diagnostics() {
+    for body in [
+        "var a = 1; a.missing();",
+        "var a = 1; print.newline(a.field);",
+        "var a = 1; print.newline(a[0]);",
+        "var a = 1; a[0] = 2;",
+        "var a = 1; a();",
+        "var a = 1; print.newline(a());",
+        "print.newline(module::value);",
+        "module::call();",
+        "var a = 1; var b = a.clamp(0,10);",
+        "print.newline((1).field);",
+    ] {
+        let error = parse(&format!("fun main() {{ {body} }}")).unwrap_err();
+        assert!(error.contains("invalid access"), "{body}: {error}");
+    }
+    assert!(parse("fun main() { var a = 1; a.clamp(0,10); print.newline(a:i64); }").is_ok());
+}
+
+#[test]
+fn reports_imports_without_interpreting_comments_or_strings() {
+    for directive in [
+        "use utils::add;",
+        "use utils::[add,subtract];",
+        "pack tools.utils;",
+        "use;",
+        "pack;",
+    ] {
+        assert!(
+            parse(&format!("{directive}\nfun main() {{}}"))
+                .unwrap_err()
+                .starts_with("1:1: invalid import:")
+        );
+        assert!(
+            parse(&format!("fun main() {{\n{directive}\n}}"))
+                .unwrap_err()
+                .starts_with("2:1: invalid import:")
+        );
+    }
+    assert!(
+        parse("/* pack missing; */ fun main() { // use missing;\nprint.newline(\"use pack\"); }")
+            .is_ok()
+    );
+    assert!(
+        parse("fun main() { var use = 1; }")
+            .unwrap_err()
+            .contains("reserved words")
+    );
+}
+
+#[test]
 fn block_comments_work_between_tokens_and_preserve_operators() {
     let source = "/* header\nignored @ \" // text */fun/**/main() { var a = 12/* note * / */ / 3 * 2; print.newline(a); }/**/";
     let plain = "fun main() { var a = 12 / 3 * 2; print.newline(a); }";
@@ -190,7 +241,7 @@ fn rejects_invalid_programs_with_diagnostics() {
             "not declared",
         ),
         ("fun main() { var print = 1; }", "reserved words"),
-        ("fun main() { var a = 1.5.5; }", "expected Symbol(';')"),
+        ("fun main() { var a = 1.5.5; }", "invalid access"),
         ("fun main() { var a = 1 }", "expected Symbol(';')"),
         ("fun main() { var a = ; }", "expected an expression"),
         (

@@ -11,6 +11,28 @@ static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[test]
 #[ignore = "requires NASM and the Visual Studio x64 developer environment"]
+fn native_warnings_do_not_block_builds() {
+    let project = Project::new(
+        "fun main() { var unused = 1; print.newline(value()); } fun value() r:int { r = 7; return r; print.newline(999); } fun unused_function() r:None {}",
+    );
+    let build = Command::new(env!("CARGO_BIN_EXE_adamantium-compiler"))
+        .arg(&project.0)
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&build.stderr);
+    assert!(build.status.success(), "{stderr}");
+    for code in ["W001", "W002", "W003"] {
+        assert!(stderr.contains(&format!("warning[{code}]")), "{stderr}");
+    }
+    let output = Command::new(project.0.join("target/NativeTest.exe"))
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"7\r\n");
+}
+
+#[test]
+#[ignore = "requires NASM and the Visual Studio x64 developer environment"]
 fn native_all_types_and_typed_calls() {
     let output = Project::new(
         r#"

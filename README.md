@@ -226,6 +226,33 @@ The compiler's existing project metadata and package manifest format is unchange
 
 ## Development
 
+### Compiler diagnostics
+
+Warnings include the source path, line, column, and a stable code. They are written
+to stderr and do not block a build:
+
+| Code | Meaning |
+| --- | --- |
+| `W001` | Unreachable code after an unconditional `return` (one warning per trailing block) |
+| `W002` | A local variable or parameter is never read in reachable statements |
+| `W003` | A function cannot be reached through calls starting at `main` |
+
+Assignments alone do not count as reads. The named result is implicitly read when
+the function returns. Reads and calls after `return` do not suppress unused
+warnings. Disconnected recursive groups count as unused functions. Prefix an
+intentionally unused variable, parameter, or function name with `_` to suppress
+its unused warning. Initializers and other side effects are still executed.
+
+Invalid access is a compile error: undeclared or uninitialized variables, writes
+to static variables, calls on variable values, unsupported fields/indexing/qualified
+names, unknown methods, and nonnumeric `clamp` operations are rejected.
+
+`use` and `pack` produce an explicit invalid-import error at the directive. Modules
+and imports are not implemented yet, so there are currently no resolvable imports.
+Checks for missing module files, private exports, and duplicate imports remain
+part of the future module system. These checks do not add `pub`/`priv` or memory
+access support. Unreachable code is still parsed and type-checked.
+
 Run these commands from this directory:
 
 ```bat

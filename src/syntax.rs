@@ -80,6 +80,8 @@ pub struct Function {
     pub statements: Vec<Statement>,
     pub positions: Vec<Position>,
     pub types: Vec<Option<Type>>,
+    pub bindings: Vec<(String, Position)>,
+    pub position: Position,
 }
 #[derive(Debug)]
 pub struct Program {
@@ -96,6 +98,7 @@ struct Parser {
     bindings: HashMap<String, Binding>,
     result_name: Option<String>,
     types: Vec<Option<Type>>,
+    declarations: Vec<(String, Position)>,
 }
 
 fn lex(source: &str) -> Result<Vec<(Token, Position)>, String> {
@@ -212,7 +215,7 @@ fn lex(source: &str) -> Result<Vec<(Token, Position)>, String> {
                 }
             }
             Token::String(value)
-        } else if "(){}.;=,:+-*/".contains(c) {
+        } else if "(){}.;=,:+-*/[]".contains(c) {
             Token::Symbol(c)
         } else {
             return Err(position.error(format!("unexpected character {c:?}")));
@@ -281,6 +284,8 @@ impl Parser {
                     "List",
                     "enum",
                     "class",
+                    "use",
+                    "pack",
                 ]
                 .contains(&name.as_str())
                     && Type::parse(&name).is_none() =>
@@ -302,6 +307,7 @@ impl Parser {
             return Err(position.error(format!("variable '{name}' is already declared")));
         }
         let slot = self.bindings.len();
+        self.declarations.push((name.clone(), position));
         self.types.push(ty);
         self.bindings.insert(
             name,
@@ -338,6 +344,11 @@ impl Parser {
         Ok(slot)
     }
     fn arguments(&mut self, name: String, position: Position) -> Result<Call, String> {
+        if self.bindings.contains_key(&name) {
+            return Err(
+                position.error(format!("invalid access: variable '{name}' is not callable"))
+            );
+        }
         self.symbol('(')?;
         let mut arguments = Vec::new();
         if !self.take(Token::Symbol(')')) {
@@ -393,6 +404,7 @@ impl Parser {
                 inner
             }
             Token::Word(name) => {
+                self.reject_access()?;
                 if self.peek() == &Token::Symbol('(') {
                     Expr::Call(self.arguments(name, position)?)
                 } else {
@@ -404,6 +416,7 @@ impl Parser {
         self.expression_tail(left, min_precedence)
     }
     fn expression_tail(&mut self, mut left: Expr, min_precedence: u8) -> Result<Expr, String> {
+        self.reject_access()?;
         while let Token::Symbol(c) = self.peek() {
             let Some(operator) = Operator::from_char(*c) else {
                 break;
@@ -423,9 +436,22 @@ impl Parser {
         if min_precedence == 0 && self.take(Token::Symbol(':')) {
             left = Expr::Annotated(Box::new(left), self.type_name()?);
         }
+        self.reject_access()?;
         Ok(left)
     }
+    fn reject_access(&self) -> Result<(), String> {
+        let qualified = self.peek() == &Token::Symbol(':')
+            && self
+                .tokens
+                .get(self.cursor + 1)
+                .is_some_and(|(token, _)| *token == Token::Symbol(':'));
+        if qualified || matches!(self.peek(), Token::Symbol('.' | '[')) {
+            return Err(self.position().error("invalid access: fields, indexing and qualified names are not supported; clamp is a standalone statement"));
+        }
+        Ok(())
+    }
     fn statement(&mut self) -> Result<Statement, String> {
+        self.reject_import()?;
         let position = self.position();
         let statement = match self.next() {
             Token::Word(word) if word == "var" || word == "variable" => {
@@ -471,7 +497,11 @@ impl Parser {
                 } else if self.take(Token::Symbol('.')) {
                     self.writable_variable(&name, position)?;
                     let slot = self.variable(&name, true, position)?;
-                    self.word("clamp")?;
+                    if !self.take(Token::Word("clamp".into())) {
+                        return Err(self.position().error(
+                            "invalid access: the only supported variable method is clamp(min,max)",
+                        ));
+                    }
                     self.symbol('(')?;
                     let low = self.expression(0)?;
                     self.symbol(',')?;
@@ -479,6 +509,7 @@ impl Parser {
                     self.symbol(')')?;
                     Statement::Clamp(slot, low, high)
                 } else {
+                    self.reject_access()?;
                     let slot = self.writable_variable(&name, position)?;
                     let equals = self.position();
                     self.symbol('=')?;
@@ -512,6 +543,7 @@ impl Parser {
     fn function(&mut self) -> Result<Function, String> {
         self.bindings.clear();
         self.types.clear();
+        self.declarations.clear();
         self.result_name = None;
         let function_position = self.position();
         self.word("fun")?;
@@ -578,21 +610,34 @@ impl Parser {
             statements,
             positions,
             types: self.types.clone(),
+            bindings: self.declarations.clone(),
+            position: function_position,
         })
+    }
+    fn reject_import(&self) -> Result<(), String> {
+        if let Token::Word(keyword) = self.peek()
+            && (keyword == "use" || keyword == "pack")
+        {
+            return Err(self.position().error(format!("invalid import: '{keyword}' cannot be resolved because modules and imports are not supported yet")));
+        }
+        Ok(())
     }
 }
 
 pub fn parse(source: &str) -> Result<Program, String> {
+    let tokens = lex(source)?;
     let mut parser = Parser {
-        tokens: lex(source)?,
+        tokens,
         cursor: 0,
         bindings: HashMap::new(),
         result_name: None,
         types: Vec::new(),
+        declarations: Vec::new(),
     };
     let mut functions = Vec::new();
     let mut signatures = HashMap::new();
     while parser.peek() != &Token::End {
+        parser.reject_import()?;
         let position = parser.position();
         let function = parser.function()?;
         if signatures

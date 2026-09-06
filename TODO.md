@@ -9,7 +9,7 @@
 * [x] Add `--help`
 * [ ] Add `--version`
 * [x] Add compiler error handling
-* [ ] Add compiler warning system
+* [x] Add compiler warning system — nonfatal warnings with codes and source locations
 * [x] Create basic documentation structure
 
 ---
@@ -79,11 +79,11 @@ Executable
 * [x] Implement scope resolution — function-local variables; nested block scopes are pending
 * [x] Implement type checking
 * [x] Implement semantic analysis — names, arity, initialization, named returns, and mutability
-* [ ] Implement unreachable-code detection
-* [ ] Implement unused-variable detection
-* [ ] Implement unused-function detection
-* [ ] Implement invalid-access detection
-* [ ] Implement invalid-import detection
+* [x] Implement unreachable-code detection — statements after unconditional `return`
+* [x] Implement unused-variable detection — reachable reads of locals and parameters
+* [x] Implement unused-function detection — call graph rooted at `main`, including disconnected cycles
+* [x] Implement invalid-access detection — current names, mutability, calls, methods and unsupported member/index/qualified access
+* [x] Implement invalid-import detection — explicit rejection of `use`/`pack`; module resolution and visibility checks are pending
 * [x] Implement code generation
 * [x] Implement NASM backend
 * [x] Implement object file generation

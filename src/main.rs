@@ -1,4 +1,5 @@
 mod codegen;
+mod diagnostics;
 mod syntax;
 mod typed;
 #[allow(dead_code)] // Shared with the separately linked native runtime.
@@ -90,6 +91,9 @@ fn run() -> Result<(), String> {
         fs::read_to_string(&source_path).map_err(|e| format!("{}: {e}", source_path.display()))?;
     let parsed = syntax::parse(&source).map_err(|e| format!("{}:{e}", source_path.display()))?;
     let statements = typed::check(&parsed).map_err(|e| format!("{}:{e}", source_path.display()))?;
+    for warning in diagnostics::warnings(&parsed) {
+        eprintln!("{}:{warning}", source_path.display());
+    }
     let target = root.join("target");
     fs::create_dir_all(&target).map_err(|e| e.to_string())?;
     let asm = target.join(format!("{name}.asm"));
