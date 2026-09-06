@@ -83,7 +83,7 @@ impl Generator {
                 memory(request, i * 16 + 8)
             ));
         }
-        self.emit(format!("    mov dword {}, {operation}\n    mov dword {}, {}\n    mov dword {}, {}\n    lea rcx, {}\n    call ad_evaluate\n    test eax, eax\n    jnz ad_exit_error\n    mov rax, {}\n    mov rdx, {}", memory(request,64), memory(request,68),ty as u32,memory(request,72),from as u32,memory(request,0),memory(request,48),memory(request,56)));
+        self.emit(format!("    mov dword {}, {operation}\n    mov dword {}, {}\n    mov dword {}, {}\n    lea rcx, {}\n    call ad_evaluate\n    test eax, eax\n    jnz ad_exit_error\n    mov rax, {}\n    mov rdx, {}", memory(request,64), memory(request,68),ty.id(),memory(request,72),from.id(),memory(request,0),memory(request,48),memory(request,56)));
         self.next_slot = mark;
     }
     fn expression(&mut self, expr: &Expression) {
@@ -166,7 +166,7 @@ impl Generator {
                 Instruction::Print(value, newline) => {
                     self.expression(value);
                     let slot = self.save();
-                    self.emit(format!("    lea rcx, {}\n    mov edx, {}\n    mov r8d, {}\n    call ad_print\n    test eax, eax\n    jnz ad_exit_error",memory(slot,0),value.ty as u32,u8::from(*newline)));
+                    self.emit(format!("    lea rcx, {}\n    mov edx, {}\n    mov r8d, {}\n    call ad_print\n    test eax, eax\n    jnz ad_exit_error",memory(slot,0),value.ty.id(),u8::from(*newline)));
                 }
                 Instruction::Call(expr) => self.expression(expr),
                 Instruction::Return => self.emit("    jmp .return"),

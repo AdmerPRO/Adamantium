@@ -113,6 +113,25 @@ fn typed_functions_preserve_results_and_validate_arguments() {
 }
 
 #[test]
+fn enum_types_are_preserved_and_cannot_be_mixed() {
+    let program = checked(
+        "enum Color { red, green } enum Direction { left, right } fun main() { var color = Color.red; color = choose(Color.green); print.newline(color); } fun choose(value:Color) result:Color { result = value; }",
+    )
+    .unwrap();
+    assert_eq!(program.functions[0].types, [Type::Enum(0)]);
+    assert_eq!(program.functions[1].types, [Type::Enum(0), Type::Enum(0)]);
+
+    for source in [
+        "enum A { value } enum B { value } fun main() { var a = A.value; a = B.value; }",
+        "enum A { value } fun main() { var a = A.value; a = 1; }",
+        "enum A { value } fun main() { var a = A.value + A.value; }",
+        "enum A { value } fun main() { var a = A.value; a.clamp(A.value,A.value); }",
+    ] {
+        assert!(checked(source).is_err(), "accepted {source}");
+    }
+}
+
+#[test]
 fn floating_formats_round_and_preserve_quad_precision() {
     let single = types::literal("16777217", Type::F32).unwrap();
     assert_eq!(types::display(single, Type::F32).unwrap(), "16777216");

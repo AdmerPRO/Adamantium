@@ -126,7 +126,26 @@ Their contents are immutable literals; concatenation and indexing are not yet
 supported. `bool` prints `true` or `false`; `None` prints `None`. Optional types
 are not implemented: a variable of type `None` can only hold `None`.
 
-`offset`, `List`, `enum`, `class`, and function-value types remain unsupported.
+`offset`, `List`, `class`, and function-value types remain unsupported.
+
+Enums are declared at file level before their first use. Variants are separated
+with commas, and a trailing comma is optional:
+
+```text
+enum MyTable {
+    option,
+    second_option
+}
+
+fun main() {
+    var value = MyTable.option;
+    value = MyTable.second_option;
+    print.newline(value); // Prints the variant index: 1.
+}
+```
+
+Each enum is a distinct type. Enum values can be assigned, passed to functions,
+returned, and printed. Arithmetic and `clamp` are not supported for enums.
 
 ### Comments
 

@@ -51,6 +51,7 @@ pub enum Expr {
     String(Vec<u8>),
     Bool(bool),
     None,
+    EnumVariant(Type, u32),
     Annotated(Box<Expr>, Type),
     Variable(usize),
     Negate(Box<Expr>),
@@ -92,6 +93,10 @@ struct Binding {
     initialized: bool,
     changeable: bool,
 }
+struct EnumDefinition {
+    ty: Type,
+    variants: HashMap<String, u32>,
+}
 struct Parser {
     tokens: Vec<(Token, Position)>,
     cursor: usize,
@@ -99,6 +104,7 @@ struct Parser {
     result_name: Option<String>,
     types: Vec<Option<Type>>,
     declarations: Vec<(String, Position)>,
+    enums: HashMap<String, EnumDefinition>,
 }
 
 fn lex(source: &str) -> Result<Vec<(Token, Position)>, String> {
@@ -303,6 +309,11 @@ impl Parser {
         ty: Option<Type>,
         position: Position,
     ) -> Result<usize, String> {
+        if self.enums.contains_key(&name) {
+            return Err(position.error(format!(
+                "variable '{name}' conflicts with an enum of the same name"
+            )));
+        }
         if self.bindings.contains_key(&name) {
             return Err(position.error(format!("variable '{name}' is already declared")));
         }
@@ -334,7 +345,9 @@ impl Parser {
         let Token::Word(name) = self.next() else {
             return Err(position.error("expected a type name"));
         };
-        Type::parse(&name).ok_or_else(|| position.error(format!("unsupported type '{name}'")))
+        Type::parse(&name)
+            .or_else(|| self.enums.get(&name).map(|definition| definition.ty))
+            .ok_or_else(|| position.error(format!("unsupported type '{name}'")))
     }
     fn writable_variable(&self, name: &str, position: Position) -> Result<usize, String> {
         let slot = self.variable(name, false, position)?;
@@ -404,10 +417,21 @@ impl Parser {
                 inner
             }
             Token::Word(name) => {
-                self.reject_access()?;
-                if self.peek() == &Token::Symbol('(') {
+                if self.enums.contains_key(&name) && self.peek() == &Token::Symbol('.') {
+                    self.next();
+                    let variant_position = self.position();
+                    let Token::Word(variant) = self.next() else {
+                        return Err(variant_position.error("expected an enum variant name"));
+                    };
+                    let definition = &self.enums[&name];
+                    let value = definition.variants.get(&variant).copied().ok_or_else(|| {
+                        variant_position.error(format!("enum '{name}' has no variant '{variant}'"))
+                    })?;
+                    Expr::EnumVariant(definition.ty, value)
+                } else if self.peek() == &Token::Symbol('(') {
                     Expr::Call(self.arguments(name, position)?)
                 } else {
+                    self.reject_access()?;
                     Expr::Variable(self.variable(&name, true, position)?)
                 }
             }
@@ -614,6 +638,47 @@ impl Parser {
             position: function_position,
         })
     }
+    fn enum_declaration(&mut self) -> Result<String, String> {
+        self.word("enum")?;
+        let position = self.position();
+        let name = self.name()?;
+        if self.enums.contains_key(&name) {
+            return Err(position.error(format!("enum '{name}' is already declared")));
+        }
+        self.symbol('{')?;
+        let mut variants = HashMap::new();
+        if self.peek() == &Token::Symbol('}') {
+            return Err(self
+                .position()
+                .error("enum must declare at least one variant"));
+        }
+        loop {
+            let variant_position = self.position();
+            let variant = self.name()?;
+            let value = variants.len() as u32;
+            if variants.insert(variant.clone(), value).is_some() {
+                return Err(
+                    variant_position.error(format!("enum variant '{variant}' is already declared"))
+                );
+            }
+            if self.take(Token::Symbol('}')) {
+                break;
+            }
+            self.symbol(',')?;
+            if self.take(Token::Symbol('}')) {
+                break;
+            }
+        }
+        let id = self.enums.len() as u32;
+        self.enums.insert(
+            name.clone(),
+            EnumDefinition {
+                ty: Type::Enum(id),
+                variants,
+            },
+        );
+        Ok(name)
+    }
     fn reject_import(&self) -> Result<(), String> {
         if let Token::Word(keyword) = self.peek()
             && (keyword == "use" || keyword == "pack")
@@ -633,13 +698,27 @@ pub fn parse(source: &str) -> Result<Program, String> {
         result_name: None,
         types: Vec::new(),
         declarations: Vec::new(),
+        enums: HashMap::new(),
     };
     let mut functions = Vec::new();
     let mut signatures = HashMap::new();
     while parser.peek() != &Token::End {
         parser.reject_import()?;
         let position = parser.position();
+        if parser.peek() == &Token::Word("enum".into()) {
+            let name = parser.enum_declaration()?;
+            if signatures.contains_key(&name) {
+                return Err(position.error(format!("'{name}' is already declared as a function")));
+            }
+            continue;
+        }
         let function = parser.function()?;
+        if parser.enums.contains_key(&function.name) {
+            return Err(position.error(format!(
+                "'{}' is already declared as an enum",
+                function.name
+            )));
+        }
         if signatures
             .insert(function.name.clone(), function.parameters)
             .is_some()

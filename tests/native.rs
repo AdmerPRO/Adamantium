@@ -11,6 +11,17 @@ static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_enum_values_can_be_stored_passed_and_printed() {
+    let output = Project::new(
+        "enum Choice { first, second } fun main() { var value = choose(Choice.second); print.newline(value); } fun choose(value:Choice) result:Choice { result = value; }",
+    )
+    .run();
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"1\r\n");
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_warnings_do_not_block_builds() {
     let project = Project::new(
         "fun main() { var unused = 1; print.newline(value()); } fun value() r:int { r = 7; return r; print.newline(999); } fun unused_function() r:None {}",

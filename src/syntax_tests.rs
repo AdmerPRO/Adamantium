@@ -21,6 +21,45 @@ fn rejects_invalid_access_with_specific_diagnostics() {
 }
 
 #[test]
+fn parses_enum_declarations_and_values() {
+    let program = parse(
+        "enum MyTable { option, second_option, } fun main() { var a = MyTable.option; a = MyTable.second_option; print.newline(a); }",
+    )
+    .unwrap();
+    assert!(matches!(
+        program.functions[0].statements[0],
+        Statement::Assign(_, Expr::EnumVariant(Type::Enum(0), 0))
+    ));
+    assert!(matches!(
+        program.functions[0].statements[1],
+        Statement::Assign(_, Expr::EnumVariant(Type::Enum(0), 1))
+    ));
+
+    for (source, expected) in [
+        ("enum Empty {} fun main() {}", "at least one variant"),
+        (
+            "enum Duplicate { option, option } fun main() {}",
+            "already declared",
+        ),
+        (
+            "enum MyTable { option } fun main() { var a = MyTable.missing; }",
+            "has no variant 'missing'",
+        ),
+        (
+            "enum MyTable { option } enum MyTable { other } fun main() {}",
+            "enum 'MyTable' is already declared",
+        ),
+        (
+            "enum MyTable { option } fun main() { var MyTable = 1; }",
+            "conflicts with an enum",
+        ),
+    ] {
+        let error = parse(source).unwrap_err();
+        assert!(error.contains(expected), "{error}");
+    }
+}
+
+#[test]
 fn reports_imports_without_interpreting_comments_or_strings() {
     for directive in [
         "use utils::add;",

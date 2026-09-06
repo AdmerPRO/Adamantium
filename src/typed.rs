@@ -101,7 +101,13 @@ fn promoted(a: Type, b: Type) -> Result<Type, String> {
         return Ok(a);
     }
     if a.floating() || b.floating() {
-        return Ok(if a as u32 > b as u32 { a } else { b });
+        return Ok(if matches!(a, Type::F128) || matches!(b, Type::F128) {
+            Type::F128
+        } else if matches!(a, Type::F64) || matches!(b, Type::F64) {
+            Type::F64
+        } else {
+            Type::F32
+        });
     }
     let (al, ah) = a.bounds();
     let (bl, bh) = b.bounds();
@@ -133,6 +139,7 @@ impl Checker<'_> {
             Expr::String(_) => Some(Type::String),
             Expr::Bool(_) => Some(Type::Bool),
             Expr::None => Some(Type::None),
+            Expr::EnumVariant(ty, _) => Some(*ty),
             Expr::Negate(e) | Expr::Positive(e) => self.hint(e),
             Expr::Binary(_, a, b) => match (self.hint(a), self.hint(b)) {
                 (Some(a), Some(b)) => promoted(a, b).ok(),
@@ -189,6 +196,13 @@ impl Checker<'_> {
             Expr::None => Expression {
                 ty: Type::None,
                 kind: Kind::Constant(Value::default()),
+            },
+            Expr::EnumVariant(ty, variant) => Expression {
+                ty: *ty,
+                kind: Kind::Constant(Value {
+                    lo: u64::from(*variant),
+                    hi: 0,
+                }),
             },
             Expr::Variable(slot) => Expression {
                 ty: self.types[*slot].ok_or("variable type is not known")?,

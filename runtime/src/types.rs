@@ -4,7 +4,6 @@ use rustc_apfloat::{
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(u32)]
 pub enum Type {
     I8,
     I16,
@@ -21,6 +20,7 @@ pub enum Type {
     String,
     Bool,
     None,
+    Enum(u32),
 }
 
 impl Type {
@@ -45,6 +45,9 @@ impl Type {
         })
     }
     pub fn from_id(id: u32) -> Option<Self> {
+        if id & 0x8000_0000 != 0 {
+            return Some(Self::Enum(id & 0x7fff_ffff));
+        }
         [
             Self::I8,
             Self::I16,
@@ -65,8 +68,39 @@ impl Type {
         .get(id as usize)
         .copied()
     }
+    pub fn id(self) -> u32 {
+        match self {
+            Self::I8 => 0,
+            Self::I16 => 1,
+            Self::I32 => 2,
+            Self::I64 => 3,
+            Self::U4 => 4,
+            Self::U8 => 5,
+            Self::U16 => 6,
+            Self::U32 => 7,
+            Self::U64 => 8,
+            Self::F32 => 9,
+            Self::F64 => 10,
+            Self::F128 => 11,
+            Self::String => 12,
+            Self::Bool => 13,
+            Self::None => 14,
+            Self::Enum(id) => 0x8000_0000 | id,
+        }
+    }
     pub fn integer(self) -> bool {
-        (self as u32) <= Self::U64 as u32
+        matches!(
+            self,
+            Self::I8
+                | Self::I16
+                | Self::I32
+                | Self::I64
+                | Self::U4
+                | Self::U8
+                | Self::U16
+                | Self::U32
+                | Self::U64
+        )
     }
     pub fn floating(self) -> bool {
         matches!(self, Self::F32 | Self::F64 | Self::F128)
@@ -113,6 +147,7 @@ impl std::fmt::Display for Type {
             Self::String => "string",
             Self::Bool => "bool",
             Self::None => "None",
+            Self::Enum(_) => "enum",
         })
     }
 }
@@ -283,6 +318,7 @@ pub fn display(value: Value, ty: Type) -> Result<String, String> {
         Type::F128 => Quad::from_bits(value.bits()).to_string(),
         Type::Bool => if value.lo == 0 { "false" } else { "true" }.into(),
         Type::None => "None".into(),
+        Type::Enum(_) => value.lo.to_string(),
         _ => return Err("string values must be written as UTF-8 bytes".into()),
     })
 }

@@ -216,7 +216,7 @@ Implement:
 * [x] `None`
 * [ ] `offset`
 * [ ] `List`
-* [ ] `enum`
+* [x] `enum` — named variants with distinct inferred types
 * [ ] `class`
 * [ ] `fun`
 
@@ -489,9 +489,9 @@ enum Direction {
 }
 ```
 
-* [ ] Implement enum declarations
-* [ ] Implement enum variants
-* [ ] Implement enum values
+* [x] Implement enum declarations
+* [x] Implement enum variants
+* [x] Implement enum values — assignment, function arguments/results and numeric-index printing
 * [ ] Implement enum comparison
 * [ ] Implement enum matching
 * [ ] Implement public enums
