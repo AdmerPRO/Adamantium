@@ -57,15 +57,71 @@ fun add(a:int,b:int) r:int {
 ```
 
 The program requires exactly one parameterless `main` function and can declare
-additional functions with `int` parameters and a named `int` result.
+additional functions with typed parameters and a named result.
 Single-line (`//`) and block (`/* ... */`) comments are supported, along with
 string literals with UTF-8 text and escapes.
 `print.newline` appends CRLF; `print.sameline` adds no line ending.
-Declare integer variables with `var a = 10;` and print them with
-`print.newline(a);` or `print.sameline(a);`. Values are signed 64-bit decimal
-integers, including negative numbers. Names are case-sensitive, start with an
-ASCII letter or underscore, and may then contain digits. Declare each name once,
-before using it; `fun`, `var`, `print`, `return`, and `int` are reserved words.
+Declare variables with `var a = 10;` and print them with `print.newline(a);` or
+`print.sameline(a);`. Names are case-sensitive, start with an ASCII letter or
+underscore, and may then contain digits. Declare each name once before using it.
+Keywords, mutability modifiers, and type names are reserved words.
+
+### Types and inference
+
+| Family | Supported types | Default / alias |
+| --- | --- | --- |
+| Signed integers | `i8`, `i16`, `i32`, `i64` | `int` means `i32` |
+| Unsigned integers | `u4`, `u8`, `u16`, `u32`, `u64` | `u` means `u32` |
+| Floating point | `f32`, `f64`, `f128` | `float` means `f64` |
+| Text | `string` | Inferred from a quoted string |
+| Boolean | `bool` | Inferred from `true` or `false` |
+| No value | `None` | Inferred from `None` |
+
+```text
+var a = 10;                 // i32
+var b = 10:i16;              // Explicit type after the initializer.
+var c = 10:int;              // i32
+var d = 10:u;                // u32
+var small = 15:u4;           // Range: 0 through 15.
+var large = 18446744073709551615:u64;
+var fraction = 1.5;          // f64
+var single = 1.5:f32;
+var precise = 1e4000:f128;
+var text = "Hello":string;
+var enabled = true:bool;
+var missing = None;
+```
+
+An unannotated integer literal defaults to `i32`, including in print arguments.
+Use an explicit suffix for values outside its range. Copies and function results
+retain their source type. A suffix applies to the whole preceding expression;
+use `(expression:type)` to annotate an operand inside a larger expression.
+An explicit destination type supplies the numeric context for its initializer.
+
+Each variable keeps its declared or inferred type on subsequent assignments.
+Integer literals outside the selected range are compile errors. Numeric values
+computed at runtime are checked too: overflow or an out-of-range conversion exits
+with code 2. `u4` is an unsigned 4-bit value (0–15), not a packed storage layout.
+
+Numeric destinations permit checked integer conversions, integer-to-float
+conversion, and float-width conversion. Float-to-integer conversion, conversions
+between numbers and `bool`/`string`/`None`, and string arithmetic are rejected.
+Mixed numeric expressions use a common numeric type; an integer/float expression
+uses the floating-point type. Signed/unsigned combinations with no common integer
+type are rejected. An explicit destination can supply a common numeric context.
+
+Floating-point values use IEEE binary32, binary64, or binary128 semantics, with
+round-to-nearest, ties-to-even. `f128` uses software arithmetic and is not an alias
+for `f64`. Overflow and division by zero are runtime errors; underflow follows
+IEEE rounding. Float literals accept decimal fractions and scientific notation.
+
+Strings contain UTF-8 text and support `\n`, `\r`, `\t`, `\0`, `\"`, and `\\`.
+String variables can be copied, reassigned, passed to functions, and returned.
+Their contents are immutable literals; concatenation and indexing are not yet
+supported. `bool` prints `true` or `false`; `None` prints `None`. Optional types
+are not implemented: a variable of type `None` can only hold `None`.
+
+`offset`, `List`, `enum`, `class`, and function-value types remain unsupported.
 
 ### Comments
 
@@ -90,6 +146,7 @@ var stc d = 10;     // Short form of static.
 a = 20;
 b =+ 5;
 print.newline(c);
+variable changeable score = 10:i32; // Full aliases of var and ch.
 ```
 
 `static` and `stc` prevent reassignment, compound assignment, and `clamp` on that
@@ -98,10 +155,12 @@ means immutable, not shared storage: the variable remains local to each function
 call. Passing its value to a function does not make the parameter immutable.
 `static`, `stc`, and `ch` are reserved words, and a declaration accepts at most
 one of these modifiers.
+`variable` is an exact alias of `var`, and `changeable` is an exact alias of `ch`.
+Both forms work with type suffixes, `static`, and `stc`.
 
 ### Arithmetic and assignment
 
-Initializers, assignments, print arguments, and function arguments accept integer
+Initializers, assignments, print arguments, and function arguments accept numeric
 expressions. `*` and `/` take precedence over `+` and `-`; operators at the same
 precedence are evaluated left to right. Parentheses override precedence.
 Division truncates toward zero, so `-7/2` is `-3`.
@@ -134,7 +193,8 @@ print.newline(a); // 150: clamp does not restrict future assignments.
 ```
 
 `clamp` changes the current value once, using inclusive lower and upper bounds.
-Bounds can be integer expressions and are evaluated left to right.
+Bounds can be numeric expressions and are evaluated left to right. The bounds
+must be compatible with the variable's type; `clamp` rejects nonnumeric variables.
 
 ### Functions and named results
 
@@ -153,15 +213,16 @@ name declared in the signature; arbitrary return expressions are not supported.
 Functions can be declared before or after `main`, called from other functions,
 and nested inside expressions. Arguments are evaluated left to right and passed
 by value. Each call has its own local variables; changing a parameter does not
-change the caller's variable. Only `int` parameters and results are supported.
+change the caller's variable. Parameters and results accept every type listed
+above, including strings, booleans, and `f128`. A `None` result starts as `None`,
+so `fun notify() result:None { print.newline("Done"); }` needs no assignment.
 `main` cannot be called by another function. Loops, conditionals, imports, and
 packages are not implemented yet.
 
 Division by zero, signed arithmetic overflow, and reversed clamp bounds stop the
 EXE with a diagnostic on stderr and exit code 2. Output failures use exit code 1.
 
-See the [project README](../README.md) for project configuration and string
-escape details.
+The compiler's existing project metadata and package manifest format is unchanged.
 
 ## Development
 
@@ -172,6 +233,8 @@ cargo build --release
 cargo test
 cargo clippy --all-targets -- -D warnings
 cargo fmt --check
+cargo fmt --manifest-path runtime/Cargo.toml --check
+cargo clippy --manifest-path runtime/Cargo.toml --all-targets -- -D warnings
 ```
 
 From the Windows x64 developer environment with NASM installed, also run the
@@ -184,9 +247,19 @@ cargo test --locked --test native -- --ignored
 
 The release compiler is generated at `target\release\adamantium-compiler.exe`.
 `src/main.rs` handles configuration and external tools; `src/syntax.rs`
-handles parsing and semantic checks. `src/codegen.rs` generates assembly and
-`src/runtime.asm` implements output and runtime errors. Parser tests live in
-`src/syntax_tests.rs`, and native regression tests live in `tests/native.rs`.
+handles parsing and name checks. `src/typed.rs` checks types and conversions.
+`src/codegen.rs` generates NASM assembly; `src/runtime.asm` provides the entry
+point. `runtime/` contains shared type semantics, software floating point, and
+output helpers. Type tests run on every CI platform; native regression tests
+live in `tests/native.rs`.
+
+On Windows x64, `build.rs` builds and embeds a Rust static runtime library into
+the compiler. Compiling a project writes this library into its `target` directory
+and links it alongside the NASM object and the system libraries reported by Rust.
+Generated programs now use the Microsoft C runtime startup and Rust runtime
+helpers. The compiler's MSVC build and the Visual Studio/Windows SDK libraries
+are required to produce an EXE; Linux/macOS builds still support compiler checks
+and tests, but do not include a Windows runtime archive.
 
 ## Continuous integration
 

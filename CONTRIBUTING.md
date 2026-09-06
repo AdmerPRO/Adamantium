@@ -53,7 +53,9 @@ error messages.
 
 `src/main.rs` handles project configuration and invokes NASM and the linker.
 `src/syntax.rs` parses and validates source code; `src/syntax_tests.rs` tests it.
-`src/codegen.rs` generates assembly, and `src/runtime.asm` provides runtime helpers.
+`src/typed.rs` checks types. `src/codegen.rs` generates assembly, and
+`src/runtime.asm` provides the entry point. `runtime/` implements typed operations
+and output, including software `f128` arithmetic.
 The example project lives in `../adamantium-project`.
 
 ## Verify your work
@@ -62,9 +64,11 @@ For compiler changes, run:
 
 ```bat
 cargo fmt --check
+cargo fmt --manifest-path runtime/Cargo.toml --check
 cargo test
 cargo test --locked --test native -- --ignored
 cargo clippy --all-targets -- -D warnings
+cargo clippy --manifest-path runtime/Cargo.toml --all-targets -- -D warnings
 cargo run -- ../adamantium-project
 ..\adamantium-project\target\FirstProject.exe
 ```

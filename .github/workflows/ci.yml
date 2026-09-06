@@ -41,6 +41,12 @@ jobs:
       - name: Check compilation
         run: cargo check --locked --all-targets --all-features
 
+      - name: Check runtime formatting
+        run: cargo fmt --manifest-path runtime/Cargo.toml --check
+
+      - name: Check runtime compilation
+        run: cargo check --manifest-path runtime/Cargo.toml --locked --all-targets
+
       - name: Install Typos
         uses: taiki-e/install-action@v2
         with:
@@ -54,6 +60,9 @@ jobs:
 
       - name: Run tests
         run: cargo test --locked --all-targets --all-features
+
+      - name: Lint runtime code
+        run: cargo clippy --manifest-path runtime/Cargo.toml --locked --all-targets -- -D warnings
 
       - name: Check compiler CLI
         run: cargo run --locked -- --help

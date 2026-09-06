@@ -1,153 +1,195 @@
-use crate::syntax::{Call, Expr, Function, Operator, Program, Statement};
+use crate::{
+    syntax::Operator,
+    typed::{Expression, Function, Instruction, Kind, Program},
+    types::Type,
+};
 
 struct Generator {
     text: String,
     data: Vec<Vec<u8>>,
     next_slot: usize,
     max_slot: usize,
-    label: usize,
 }
-fn memory(slot: usize) -> String {
-    format!("[rbp - {}]", (slot + 1) * 8)
+fn memory(slot: usize, offset: usize) -> String {
+    format!("[rbp - {}]", (slot + 1) * 16 - offset)
 }
 impl Generator {
     fn emit(&mut self, text: impl AsRef<str>) {
         self.text.push_str(text.as_ref());
         self.text.push('\n');
     }
-    fn save(&mut self) -> usize {
-        let slot = self.next_slot;
-        self.next_slot += 1;
+    fn reserve(&mut self, count: usize) -> usize {
+        self.next_slot += count;
         self.max_slot = self.max_slot.max(self.next_slot);
-        self.emit(format!("    mov {}, rax", memory(slot)));
+        self.next_slot - 1
+    }
+    fn store(&mut self, slot: usize) {
+        self.emit(format!(
+            "    mov {}, rax\n    mov {}, rdx",
+            memory(slot, 0),
+            memory(slot, 8)
+        ));
+    }
+    fn load(&mut self, slot: usize) {
+        self.emit(format!(
+            "    mov rax, {}\n    mov rdx, {}",
+            memory(slot, 0),
+            memory(slot, 8)
+        ));
+    }
+    fn save(&mut self) -> usize {
+        let slot = self.reserve(1);
+        self.store(slot);
         slot
     }
-    fn call(&mut self, call: &Call) {
+    fn call(&mut self, name: &str, arguments: &[Expression]) {
         let mark = self.next_slot;
         let mut slots = Vec::new();
-        // Evaluate arguments left to right into frame-relative temporaries.
-        for argument in &call.arguments {
+        for argument in arguments {
             self.expression(argument);
             slots.push(self.save());
         }
-        let size = (slots.len() * 8).div_ceil(16) * 16;
-        // Large argument lists must also touch each Windows stack guard page.
+        let size = slots.len() * 16;
         for offset in (0..size).step_by(4096) {
             let step = (size - offset).min(4096);
             self.emit(format!("    sub rsp, {step}\n    test byte [rsp], 0"));
         }
         for (i, slot) in slots.iter().enumerate() {
+            self.load(*slot);
             self.emit(format!(
-                "    mov rax, {}\n    mov [rsp + {}], rax",
-                memory(*slot),
-                i * 8
+                "    mov [rsp + {}], rax\n    mov [rsp + {}], rdx",
+                i * 16,
+                i * 16 + 8
             ));
         }
-        self.emit(format!("    call ad_fun_{}", call.name));
+        self.emit(format!("    call ad_fun_{name}"));
         if size != 0 {
             self.emit(format!("    add rsp, {size}"));
         }
         self.next_slot = mark;
     }
-    fn expression(&mut self, expr: &Expr) {
-        match expr {
-            Expr::Integer(value) => self.emit(format!("    mov rax, {value}")),
-            Expr::Variable(slot) => self.emit(format!("    mov rax, {}", memory(*slot))),
-            Expr::Negate(expr) => {
-                self.expression(expr);
-                self.emit("    neg rax\n    jo ad_runtime_error");
+    fn evaluate(&mut self, operation: u32, ty: Type, from: Type, operands: &[usize]) {
+        let mark = self.next_slot;
+        let request = self.reserve(5);
+        // Request is 80 bytes: three operands, output, operation/type/from/padding.
+        for offset in (0..80).step_by(8) {
+            self.emit(format!("    mov qword {}, 0", memory(request, offset)));
+        }
+        for (i, slot) in operands.iter().enumerate() {
+            self.load(*slot);
+            self.emit(format!(
+                "    mov {}, rax\n    mov {}, rdx",
+                memory(request, i * 16),
+                memory(request, i * 16 + 8)
+            ));
+        }
+        self.emit(format!("    mov dword {}, {operation}\n    mov dword {}, {}\n    mov dword {}, {}\n    lea rcx, {}\n    call ad_evaluate\n    test eax, eax\n    jnz ad_exit_error\n    mov rax, {}\n    mov rdx, {}", memory(request,64), memory(request,68),ty as u32,memory(request,72),from as u32,memory(request,0),memory(request,48),memory(request,56)));
+        self.next_slot = mark;
+    }
+    fn expression(&mut self, expr: &Expression) {
+        match &expr.kind {
+            Kind::Constant(value) => self.emit(format!(
+                "    mov rax, {}\n    mov rdx, {}",
+                value.lo, value.hi
+            )),
+            Kind::String(bytes) => {
+                let index = self.data.len();
+                self.data.push(bytes.clone());
+                self.emit(format!(
+                    "    lea rax, [rel ad_string_{index}]\n    mov rdx, {}",
+                    bytes.len()
+                ));
             }
-            Expr::Call(call) => self.call(call),
-            Expr::Binary(operator, left, right) => {
+            Kind::Variable(slot) => self.load(*slot),
+            Kind::Call(name, arguments) => self.call(name, arguments),
+            Kind::Negate(value) | Kind::Convert(value) => {
                 let mark = self.next_slot;
-                self.expression(left);
+                self.expression(value);
                 let slot = self.save();
-                self.expression(right);
-                self.emit(format!("    mov r10, rax\n    mov rax, {}", memory(slot)));
-                match operator {
-                    Operator::Add => self.emit("    add rax, r10\n    jo ad_runtime_error"),
-                    Operator::Subtract => self.emit("    sub rax, r10\n    jo ad_runtime_error"),
-                    Operator::Multiply => self.emit("    imul rax, r10\n    jo ad_runtime_error"),
-                    Operator::Divide => {
-                        self.label += 1;
-                        self.emit(format!("    test r10, r10\n    jz ad_runtime_error\n    mov r11, -9223372036854775808\n    cmp rax, r11\n    jne .divide_safe_{}\n    cmp r10, -1\n    je ad_runtime_error\n.divide_safe_{}:\n    cqo\n    idiv r10", self.label, self.label));
-                    }
-                }
+                let op = if matches!(expr.kind, Kind::Negate(_)) {
+                    4
+                } else {
+                    5
+                };
+                self.evaluate(op, expr.ty, value.ty, &[slot]);
+                self.next_slot = mark;
+            }
+            Kind::Binary(op, a, b) => {
+                let mark = self.next_slot;
+                self.expression(a);
+                let left = self.save();
+                self.expression(b);
+                let right = self.save();
+                let op = match op {
+                    Operator::Add => 0,
+                    Operator::Subtract => 1,
+                    Operator::Multiply => 2,
+                    Operator::Divide => 3,
+                };
+                self.evaluate(op, expr.ty, expr.ty, &[left, right]);
                 self.next_slot = mark;
             }
         }
     }
-    fn print_string(&mut self, bytes: &[u8]) {
-        if bytes.is_empty() {
-            return;
-        }
-        let index = self.data.len();
-        self.data.push(bytes.to_vec());
-        self.emit(format!(
-            "    lea rcx, [rel ad_string_{index}]\n    mov edx, {}\n    call ad_write",
-            bytes.len()
-        ));
-    }
     fn function(&mut self, function: &Function) {
-        self.next_slot = function.variables;
+        self.next_slot = function.types.len();
         self.max_slot = self.next_slot;
         let start = self.text.len();
         for slot in 0..function.parameters {
             self.emit(format!(
-                "    mov rax, [rbp + {}]\n    mov {}, rax",
-                16 + slot * 8,
-                memory(slot)
+                "    mov rax, [rbp + {}]\n    mov rdx, [rbp + {}]",
+                16 + slot * 16,
+                24 + slot * 16
             ));
+            self.store(slot);
         }
-        for statement in &function.statements {
-            match statement {
-                Statement::Assign(slot, expr) => {
-                    self.expression(expr);
-                    self.emit(format!("    mov {}, rax", memory(*slot)));
+        for instruction in &function.instructions {
+            let mark = self.next_slot;
+            match instruction {
+                Instruction::Assign(slot, value) => {
+                    self.expression(value);
+                    self.store(*slot);
                 }
-                Statement::Clamp(slot, low, high) => {
-                    let mark = self.next_slot;
+                Instruction::Clamp(slot, low, high) => {
                     self.expression(low);
-                    let low_slot = self.save();
+                    let low = self.save();
                     self.expression(high);
-                    self.emit(format!("    mov r10, {}\n    cmp r10, rax\n    jg ad_runtime_error\n    mov r11, {}\n    cmp r11, r10\n    cmovl r11, r10\n    cmp r11, rax\n    cmovg r11, rax\n    mov {}, r11", memory(low_slot), memory(*slot), memory(*slot)));
-                    self.next_slot = mark;
+                    let high = self.save();
+                    self.evaluate(
+                        6,
+                        function.types[*slot],
+                        function.types[*slot],
+                        &[*slot, low, high],
+                    );
+                    self.store(*slot);
                 }
-                Statement::PrintString(bytes) => self.print_string(bytes),
-                Statement::PrintInteger(expr, newline) => {
-                    self.expression(expr);
-                    self.emit("    mov rcx, rax\n    call ad_print_integer");
-                    if *newline {
-                        self.print_string(b"\r\n");
-                    }
+                Instruction::Print(value, newline) => {
+                    self.expression(value);
+                    let slot = self.save();
+                    self.emit(format!("    lea rcx, {}\n    mov edx, {}\n    mov r8d, {}\n    call ad_print\n    test eax, eax\n    jnz ad_exit_error",memory(slot,0),value.ty as u32,u8::from(*newline)));
                 }
-                Statement::Call(call) => self.call(call),
-                Statement::Return => self.emit("    jmp .return"),
+                Instruction::Call(expr) => self.expression(expr),
+                Instruction::Return => self.emit("    jmp .return"),
             }
+            self.next_slot = mark;
         }
         self.emit(".return:");
         if let Some(slot) = function.result {
-            self.emit(format!("    mov rax, {}", memory(slot)));
+            self.load(slot);
         } else {
-            self.emit("    xor eax, eax");
+            self.emit("    xor eax, eax\n    xor edx, edx");
         }
         self.emit("    mov rsp, rbp\n    pop rbp\n    ret");
-        // Shadow space stays below locals and temporaries. Probe Windows guard pages.
-        let frame = (self.max_slot * 8 + 32).div_ceil(16) * 16;
-        let prologue = format!(
-            "ad_fun_{}:\n    push rbp\n    mov rbp, rsp\n    mov r11, {frame}\n.probe:\n    cmp r11, 4096\n    jb .probe_tail\n    sub rsp, 4096\n    test byte [rsp], 0\n    sub r11, 4096\n    jmp .probe\n.probe_tail:\n    sub rsp, r11\n    test byte [rsp], 0\n",
-            function.name
-        );
-        self.text.insert_str(start, &prologue);
+        let frame = self.max_slot * 16 + 32;
+        self.text.insert_str(start,&format!("ad_fun_{}:\n    push rbp\n    mov rbp, rsp\n    mov r11, {frame}\n.probe:\n    cmp r11, 4096\n    jb .tail\n    sub rsp, 4096\n    test byte [rsp], 0\n    sub r11, 4096\n    jmp .probe\n.tail:\n    sub rsp, r11\n    test byte [rsp], 0\n",function.name));
     }
 }
 pub fn assembly(program: &Program) -> String {
     let mut generator = Generator {
-        text: String::from(include_str!("runtime.asm")),
+        text: include_str!("runtime.asm").into(),
         data: Vec::new(),
         next_slot: 0,
         max_slot: 0,
-        label: 0,
     };
     for function in &program.functions {
         generator.function(function);
@@ -165,6 +207,7 @@ pub fn assembly(program: &Program) -> String {
                     .join(", ")
             ));
         }
+        generator.text.push_str("    db 0\n");
     }
     generator.text
 }

@@ -1,3 +1,4 @@
+use crate::types::Type;
 use std::collections::HashMap;
 
 #[cfg(test)]
@@ -14,12 +15,12 @@ enum Token {
 }
 
 #[derive(Clone, Copy, Debug)]
-struct Position {
+pub struct Position {
     line: usize,
     column: usize,
 }
 impl Position {
-    fn error(self, message: impl std::fmt::Display) -> String {
+    pub fn error(self, message: impl std::fmt::Display) -> String {
         format!("{}:{}: {message}", self.line, self.column)
     }
 }
@@ -45,9 +46,15 @@ impl Operator {
 
 #[derive(Debug)]
 pub enum Expr {
-    Integer(i64),
+    Integer(i128),
+    Decimal(String),
+    String(Vec<u8>),
+    Bool(bool),
+    None,
+    Annotated(Box<Expr>, Type),
     Variable(usize),
     Negate(Box<Expr>),
+    Positive(Box<Expr>),
     Binary(Operator, Box<Expr>, Box<Expr>),
     Call(Call),
 }
@@ -55,14 +62,13 @@ pub enum Expr {
 pub struct Call {
     pub name: String,
     pub arguments: Vec<Expr>,
-    position: Position,
+    pub position: Position,
 }
 #[derive(Debug)]
 pub enum Statement {
     Assign(usize, Expr),
     Clamp(usize, Expr, Expr),
-    PrintString(Vec<u8>),
-    PrintInteger(Expr, bool),
+    Print(Expr, bool),
     Call(Call),
     Return,
 }
@@ -71,8 +77,9 @@ pub struct Function {
     pub name: String,
     pub parameters: usize,
     pub result: Option<usize>,
-    pub variables: usize,
     pub statements: Vec<Statement>,
+    pub positions: Vec<Position>,
+    pub types: Vec<Option<Type>>,
 }
 #[derive(Debug)]
 pub struct Program {
@@ -88,6 +95,7 @@ struct Parser {
     cursor: usize,
     bindings: HashMap<String, Binding>,
     result_name: Option<String>,
+    types: Vec<Option<Type>>,
 }
 
 fn lex(source: &str) -> Result<Vec<(Token, Position)>, String> {
@@ -148,6 +156,31 @@ fn lex(source: &str) -> Result<Vec<(Token, Position)>, String> {
             while chars.peek().is_some_and(char::is_ascii_digit) {
                 number.push(chars.next().unwrap());
                 column += 1;
+            }
+            if chars.peek() == Some(&'.')
+                && chars.clone().nth(1).is_some_and(|c| c.is_ascii_digit())
+            {
+                number.push(chars.next().unwrap());
+                column += 1;
+                while chars.peek().is_some_and(char::is_ascii_digit) {
+                    number.push(chars.next().unwrap());
+                    column += 1;
+                }
+            }
+            if chars.peek().is_some_and(|c| *c == 'e' || *c == 'E') {
+                number.push(chars.next().unwrap());
+                column += 1;
+                if chars.peek().is_some_and(|c| *c == '+' || *c == '-') {
+                    number.push(chars.next().unwrap());
+                    column += 1;
+                }
+                if !chars.peek().is_some_and(char::is_ascii_digit) {
+                    return Err(position.error("expected exponent digits"));
+                }
+                while chars.peek().is_some_and(char::is_ascii_digit) {
+                    number.push(chars.next().unwrap());
+                    column += 1;
+                }
             }
             Token::Number(number)
         } else if c == '"' {
@@ -232,9 +265,25 @@ impl Parser {
         match self.next() {
             Token::Word(name)
                 if ![
-                    "fun", "var", "print", "return", "int", "static", "stc", "ch",
+                    "fun",
+                    "var",
+                    "variable",
+                    "print",
+                    "return",
+                    "static",
+                    "stc",
+                    "ch",
+                    "changeable",
+                    "true",
+                    "false",
+                    "offset",
+                    "oofset",
+                    "List",
+                    "enum",
+                    "class",
                 ]
-                .contains(&name.as_str()) =>
+                .contains(&name.as_str())
+                    && Type::parse(&name).is_none() =>
             {
                 Ok(name)
             }
@@ -246,12 +295,14 @@ impl Parser {
         name: String,
         initialized: bool,
         changeable: bool,
+        ty: Option<Type>,
         position: Position,
     ) -> Result<usize, String> {
         if self.bindings.contains_key(&name) {
             return Err(position.error(format!("variable '{name}' is already declared")));
         }
         let slot = self.bindings.len();
+        self.types.push(ty);
         self.bindings.insert(
             name,
             Binding {
@@ -271,6 +322,13 @@ impl Parser {
             return Err(position.error(format!("variable '{name}' is not initialized")));
         }
         Ok(binding.slot)
+    }
+    fn type_name(&mut self) -> Result<Type, String> {
+        let position = self.position();
+        let Token::Word(name) = self.next() else {
+            return Err(position.error("expected a type name"));
+        };
+        Type::parse(&name).ok_or_else(|| position.error(format!("unsupported type '{name}'")))
     }
     fn writable_variable(&self, name: &str, position: Position) -> Result<usize, String> {
         let slot = self.variable(name, false, position)?;
@@ -299,25 +357,36 @@ impl Parser {
     }
     fn expression(&mut self, min_precedence: u8) -> Result<Expr, String> {
         let position = self.position();
-        let mut left = match self.next() {
+        let left = match self.next() {
+            Token::Number(value) if value.contains(['.', 'e', 'E']) => Expr::Decimal(value),
             Token::Number(value) => Expr::Integer(
                 value
                     .parse()
-                    .map_err(|_| position.error("integer literal exceeds signed 64-bit range"))?,
+                    .map_err(|_| position.error("integer literal is too large"))?,
             ),
+            Token::String(value) => Expr::String(value.into_bytes()),
+            Token::Word(value) if value == "true" || value == "false" => {
+                Expr::Bool(value == "true")
+            }
+            Token::Word(value) if value == "None" => Expr::None,
             Token::Symbol('-') => {
                 // Read the negative magnitude directly to allow i64::MIN.
                 if let Token::Number(value) = self.peek() {
-                    let number = format!("-{value}").parse().map_err(|_| {
-                        position.error("integer literal exceeds signed 64-bit range")
-                    })?;
+                    if value.contains(['.', 'e', 'E']) {
+                        let decimal = Expr::Decimal(format!("-{value}"));
+                        self.next();
+                        return self.expression_tail(decimal, min_precedence);
+                    }
+                    let number = format!("-{value}")
+                        .parse()
+                        .map_err(|_| position.error("integer literal is too large"))?;
                     self.next();
                     Expr::Integer(number)
                 } else {
                     Expr::Negate(Box::new(self.expression(3)?))
                 }
             }
-            Token::Symbol('+') => self.expression(3)?,
+            Token::Symbol('+') => Expr::Positive(Box::new(self.expression(3)?)),
             Token::Symbol('(') => {
                 let inner = self.expression(0)?;
                 self.symbol(')')?;
@@ -330,8 +399,11 @@ impl Parser {
                     Expr::Variable(self.variable(&name, true, position)?)
                 }
             }
-            _ => return Err(position.error("expected an integer expression")),
+            _ => return Err(position.error("expected an expression")),
         };
+        self.expression_tail(left, min_precedence)
+    }
+    fn expression_tail(&mut self, mut left: Expr, min_precedence: u8) -> Result<Expr, String> {
         while let Token::Symbol(c) = self.peek() {
             let Some(operator) = Operator::from_char(*c) else {
                 break;
@@ -348,24 +420,29 @@ impl Parser {
             let right = self.expression(precedence + 1)?;
             left = Expr::Binary(operator, Box::new(left), Box::new(right));
         }
+        if min_precedence == 0 && self.take(Token::Symbol(':')) {
+            left = Expr::Annotated(Box::new(left), self.type_name()?);
+        }
         Ok(left)
     }
     fn statement(&mut self) -> Result<Statement, String> {
         let position = self.position();
         let statement = match self.next() {
-            Token::Word(word) if word == "var" => {
+            Token::Word(word) if word == "var" || word == "variable" => {
                 let changeable = if self.take(Token::Word("static".into()))
                     || self.take(Token::Word("stc".into()))
                 {
                     false
                 } else {
-                    self.take(Token::Word("ch".into()));
+                    if !self.take(Token::Word("ch".into())) {
+                        self.take(Token::Word("changeable".into()));
+                    }
                     true
                 };
                 let name = self.name()?;
                 self.symbol('=')?;
                 let value = self.expression(0)?;
-                let slot = self.bind(name, true, changeable, position)?;
+                let slot = self.bind(name, true, changeable, None, position)?;
                 Statement::Assign(slot, value)
             }
             Token::Word(word) if word == "print" => {
@@ -376,16 +453,7 @@ impl Parser {
                     _ => return Err(position.error("expected newline or sameline")),
                 };
                 self.symbol('(')?;
-                let output = if let Token::String(value) = self.peek() {
-                    let mut bytes = value.as_bytes().to_vec();
-                    self.next();
-                    if newline {
-                        bytes.extend_from_slice(b"\r\n");
-                    }
-                    Statement::PrintString(bytes)
-                } else {
-                    Statement::PrintInteger(self.expression(0)?, newline)
-                };
+                let output = Statement::Print(self.expression(0)?, newline);
                 self.symbol(')')?;
                 output
             }
@@ -443,7 +511,9 @@ impl Parser {
     }
     fn function(&mut self) -> Result<Function, String> {
         self.bindings.clear();
+        self.types.clear();
         self.result_name = None;
+        let function_position = self.position();
         self.word("fun")?;
         let name = self.name()?;
         self.symbol('(')?;
@@ -452,8 +522,8 @@ impl Parser {
                 let position = self.position();
                 let parameter = self.name()?;
                 self.symbol(':')?;
-                self.word("int")?;
-                self.bind(parameter, true, true, position)?;
+                let ty = self.type_name()?;
+                self.bind(parameter, true, true, Some(ty), position)?;
                 if self.take(Token::Symbol(')')) {
                     break;
                 }
@@ -470,15 +540,29 @@ impl Parser {
             let position = self.position();
             let result_name = self.name()?;
             self.symbol(':')?;
-            self.word("int")?;
-            let slot = self.bind(result_name.clone(), false, true, position)?;
+            let ty = self.type_name()?;
+            let slot = self.bind(
+                result_name.clone(),
+                ty == Type::None,
+                true,
+                Some(ty),
+                position,
+            )?;
             self.result_name = Some(result_name);
             Some(slot)
         };
         self.symbol('{')?;
         let mut statements = Vec::new();
+        let mut positions = Vec::new();
+        if let Some(slot) = result
+            && self.types[slot] == Some(Type::None)
+        {
+            statements.push(Statement::Assign(slot, Expr::None));
+            positions.push(function_position);
+        }
         let mut returned = false;
         while self.peek() != &Token::Symbol('}') {
+            positions.push(self.position());
             let statement = self.statement()?;
             returned |= matches!(statement, Statement::Return);
             statements.push(statement);
@@ -491,8 +575,9 @@ impl Parser {
             name,
             parameters,
             result,
-            variables: self.bindings.len(),
             statements,
+            positions,
+            types: self.types.clone(),
         })
     }
 }
@@ -503,6 +588,7 @@ pub fn parse(source: &str) -> Result<Program, String> {
         cursor: 0,
         bindings: HashMap::new(),
         result_name: None,
+        types: Vec::new(),
     };
     let mut functions = Vec::new();
     let mut signatures = HashMap::new();
@@ -523,7 +609,7 @@ pub fn parse(source: &str) -> Result<Program, String> {
     for function in &functions {
         for statement in &function.statements {
             match statement {
-                Statement::Assign(_, expr) | Statement::PrintInteger(expr, _) => {
+                Statement::Assign(_, expr) | Statement::Print(expr, _) => {
                     validate_expr(expr, &signatures)?
                 }
                 Statement::Clamp(_, low, high) => {
@@ -544,7 +630,9 @@ fn validate_expr(expr: &Expr, signatures: &HashMap<String, usize>) -> Result<(),
             validate_expr(left, signatures)?;
             validate_expr(right, signatures)
         }
-        Expr::Negate(expr) => validate_expr(expr, signatures),
+        Expr::Negate(expr) | Expr::Positive(expr) | Expr::Annotated(expr, _) => {
+            validate_expr(expr, signatures)
+        }
         _ => Ok(()),
     }
 }

@@ -1,5 +1,9 @@
 mod codegen;
 mod syntax;
+mod typed;
+#[allow(dead_code)] // Shared with the separately linked native runtime.
+#[path = "../runtime/src/types.rs"]
+mod types;
 
 use std::{
     env, fs,
@@ -84,13 +88,21 @@ fn run() -> Result<(), String> {
     let source_path = root.join("code/main.ad");
     let source =
         fs::read_to_string(&source_path).map_err(|e| format!("{}: {e}", source_path.display()))?;
-    let statements =
-        syntax::parse(&source).map_err(|e| format!("{}:{e}", source_path.display()))?;
+    let parsed = syntax::parse(&source).map_err(|e| format!("{}:{e}", source_path.display()))?;
+    let statements = typed::check(&parsed).map_err(|e| format!("{}:{e}", source_path.display()))?;
     let target = root.join("target");
     fs::create_dir_all(&target).map_err(|e| e.to_string())?;
     let asm = target.join(format!("{name}.asm"));
     let obj = target.join(format!("{name}.obj"));
     let exe = target.join(format!("{name}.exe"));
+    let runtime = target.join("adamantium_runtime.lib");
+    let runtime_bytes = include_bytes!(concat!(env!("OUT_DIR"), "/runtime.lib"));
+    if runtime_bytes.is_empty() {
+        return Err(
+            "building Adamantium executables requires the Windows x64 MSVC compiler build".into(),
+        );
+    }
+    fs::write(&runtime, runtime_bytes).map_err(|e| e.to_string())?;
     fs::write(&asm, codegen::assembly(&statements)).map_err(|e| e.to_string())?;
     let nasm = env::var_os("ADAMANTIUM_NASM").unwrap_or_else(|| {
         let installed = PathBuf::from(
@@ -119,13 +131,15 @@ fn run() -> Result<(), String> {
                 "/nologo",
                 "/machine:x64",
                 "/subsystem:console",
-                "/entry:main",
-                "/nodefaultlib",
                 "/dynamicbase",
                 "/nxcompat",
             ])
             .arg(format!("/out:{}", exe.display()))
             .arg(&obj)
+            .arg(&runtime)
+            .args(
+                include_str!(concat!(env!("OUT_DIR"), "/runtime-libraries.txt")).split_whitespace(),
+            )
             .arg("kernel32.lib"),
         "Microsoft linker (run from an x64 Native Tools Command Prompt for Visual Studio)",
     )?;

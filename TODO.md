@@ -77,7 +77,7 @@ Executable
 * [x] Implement AST
 * [x] Implement name resolution
 * [x] Implement scope resolution — function-local variables; nested block scopes are pending
-* [ ] Implement type checking
+* [x] Implement type checking
 * [x] Implement semantic analysis — names, arity, initialization, named returns, and mutability
 * [ ] Implement unreachable-code detection
 * [ ] Implement unused-variable detection
@@ -95,13 +95,13 @@ Executable
 # 4. Basic Syntax
 
 * [x] Implement statements
-* [x] Implement expressions — signed integer arithmetic and function calls
+* [x] Implement expressions — typed numeric arithmetic and function calls
 * [x] Implement blocks — function bodies only
 * [x] Implement semicolons
 * [x] Implement identifiers
-* [x] Implement literals — signed integers and printable strings
+* [x] Implement literals — integers, floats, strings, booleans, and `None`
 * [x] Implement function calls
-* [x] Implement operators — integer `+`, `-`, `*`, `/` and compound assignments
+* [x] Implement operators — numeric `+`, `-`, `*`, `/` and compound assignments
 * [x] Implement operator precedence
 * [x] Implement parentheses
 * [x] Implement `{ }` blocks — function bodies only
@@ -139,16 +139,16 @@ var a = 10;
 ```
 
 * [x] Implement `var`
-* [ ] Implement `variable`
+* [x] Implement `variable`
 * [x] Implement variable declaration
 * [x] Implement variable assignment
 * [x] Implement `=+`, `=-`, `=*`, and `=/` compound assignments
-* [x] Implement one-time `clamp(min,max)` on changeable integer variables
+* [x] Implement one-time `clamp(min,max)` on changeable numeric variables
 * [x] Implement variable scope — one local scope per function call
 * [ ] Implement variable shadowing rules
 * [ ] Prevent use of removed variables
 * [x] Prevent invalid reassignment
-* [ ] Implement fixed variable types
+* [x] Implement fixed variable types
 
 ---
 
@@ -175,7 +175,7 @@ variable static b = 20;
 ```
 
 * [x] Implement `ch`
-* [ ] Implement `changeable`
+* [x] Implement `changeable`
 * [x] Implement `stc`
 * [x] Implement `static`
 * [x] Make variables `changeable` by default
@@ -190,30 +190,30 @@ Implement:
 
 ### Signed integers
 
-* [ ] `i8`
-* [ ] `i16`
-* [ ] `i32`
-* [ ] `i64`
+* [x] `i8`
+* [x] `i16`
+* [x] `i32`
+* [x] `i64`
 
 ### Unsigned integers
 
-* [ ] `u4`
-* [ ] `u8`
-* [ ] `u16`
-* [ ] `u32`
-* [ ] `u64`
+* [x] `u4`
+* [x] `u8`
+* [x] `u16`
+* [x] `u32`
+* [x] `u64`
 
 ### Floating point
 
-* [ ] `f32`
-* [ ] `f64`
-* [ ] `f128`
+* [x] `f32`
+* [x] `f64`
+* [x] `f128`
 
 ### Other types
 
-* [ ] `string`
-* [ ] `bool`
-* [ ] `None`
+* [x] `string`
+* [x] `bool`
+* [x] `None`
 * [ ] `offset`
 * [ ] `List`
 * [ ] `enum`
@@ -242,12 +242,12 @@ var b = 10.5;     // f64
 var c = "Hello";  // string
 ```
 
-* [ ] Implement integer literal inference
-* [ ] Implement default `i32`
-* [ ] Implement float literal inference
-* [ ] Implement default `f64`
-* [ ] Implement string inference
-* [ ] Implement boolean inference
+* [x] Implement integer literal inference
+* [x] Implement default `i32`
+* [x] Implement float literal inference
+* [x] Implement default `f64`
+* [x] Implement string inference
+* [x] Implement boolean inference
 * [ ] Implement inferred list types
 * [ ] Detect ambiguous types
 
@@ -262,12 +262,12 @@ var a = b.as(i32);
 ```
 
 * [ ] Implement `as(Type)`
-* [ ] Implement explicit numeric conversions
-* [ ] Implement automatic numeric promotion
-* [ ] Define safe conversion rules
-* [ ] Define narrowing conversion rules
-* [ ] Detect invalid conversions
-* [ ] Preserve type safety
+* [x] Implement explicit numeric conversions — numeric type suffixes; `as(Type)` is pending
+* [x] Implement automatic numeric promotion
+* [x] Define safe conversion rules
+* [x] Define narrowing conversion rules
+* [x] Detect invalid conversions
+* [x] Preserve type safety
 
 Example:
 
@@ -277,8 +277,8 @@ var c = 5:u32;
 var a = b + c;
 ```
 
-* [ ] Automatically promote `c` to `f64`
-* [ ] Infer `a` as `f64`
+* [x] Automatically promote `c` to `f64`
+* [x] Infer `a` as `f64`
 
 ---
 
@@ -322,13 +322,13 @@ fun add(a:int, b:int) r:int {
 ```
 
 * [x] Implement functions
-* [x] Implement parameters — `int`, passed by value
+* [x] Implement parameters — supported scalar types, passed by value
 * [x] Implement named return variables
-* [x] Implement return types — `int` only; the general type system is pending
+* [x] Implement return types — supported scalar types and `None`
 * [x] Implement implicit final return
 * [x] Implement `return` — `return <named-result>;` only
 * [x] Implement early returns
-* [ ] Implement `None` return type
+* [x] Implement `None` return type
 * [x] Implement function calls
 * [ ] Implement recursion
 * [ ] Implement function values
@@ -648,9 +648,9 @@ print.sameline("Hello ");
 
 * [x] Implement `print.newline`
 * [x] Implement `print.sameline`
-* [x] Support strings — UTF-8 string literals, not string variables
-* [x] Support numbers — signed 64-bit integers only
-* [ ] Support booleans
+* [x] Support strings — UTF-8 literals and string variables
+* [x] Support numbers — signed/unsigned integers and f32/f64/f128
+* [x] Support booleans
 * [ ] Support objects where appropriate
 * [x] Reject invalid `print(...)` syntax
 
@@ -1079,12 +1079,12 @@ Adamantium must remain memory-safe.
 * [ ] Design Adamantium runtime
 * [x] Implement runtime startup
 * [x] Implement runtime shutdown
-* [x] Implement printing — UTF-8 literals and signed integers
+* [x] Implement printing — strings, integers, floats, booleans, and `None`
 * [ ] Implement panic handling
 * [ ] Implement warning handling
 * [x] Implement exit codes — normal completion, output failures, arithmetic/range failures
 * [ ] Implement memory management
-* [ ] Implement string runtime
+* [x] Implement string runtime — immutable literal storage and value copies; string operations are pending
 * [ ] Implement list runtime
 * [ ] Implement object runtime
 * [x] Report arithmetic overflow, division by zero, and invalid clamp ranges
@@ -1097,7 +1097,7 @@ Adamantium must remain memory-safe.
 
 * [x] Generate valid NASM syntax
 * [x] Generate functions
-* [x] Generate variables — local integer stack slots
+* [x] Generate variables — typed local values in stack slots
 * [x] Generate arithmetic
 * [ ] Generate comparisons
 * [ ] Generate branches
@@ -1106,7 +1106,7 @@ Adamantium must remain memory-safe.
 * [x] Generate returns
 * [ ] Generate classes
 * [ ] Generate lists
-* [x] Generate strings — read-only UTF-8 literals
+* [x] Generate strings — read-only UTF-8 storage with pointer/length values
 * [ ] Generate aliases
 * [ ] Generate async support
 * [x] Generate runtime calls
@@ -1159,8 +1159,8 @@ Create the official standard library.
 * [x] Installation guide
 * [x] Getting started guide
 * [x] Variables — currently supported declarations and mutability
-* [ ] Types
-* [x] Functions — current `int` parameters and named-result behavior
+* [x] Types — supported scalar types, defaults, and suffix annotations
+* [x] Functions — typed parameters and named-result behavior
 * [ ] Classes
 * [ ] Enums
 * [ ] Modules
@@ -1235,7 +1235,7 @@ Create the official standard library.
 * [x] Lexer tests — covered through parser regression tests
 * [x] Parser tests
 * [x] AST tests
-* [ ] Type checker tests
+* [x] Type checker tests
 * [x] Semantic analysis tests
 * [ ] Module tests
 * [ ] Class tests

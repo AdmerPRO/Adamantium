@@ -20,10 +20,10 @@ fn block_comments_work_between_tokens_and_preserve_operators() {
 fn comment_delimiters_inside_strings_and_line_comments_are_literal() {
     let statements =
         main_statements("// /* not a block comment\nfun main() { print.newline(\"/* text */\"); }");
-    let Statement::PrintString(bytes) = &statements[0] else {
+    let Statement::Print(Expr::String(bytes), true) = &statements[0] else {
         panic!("string expected");
     };
-    assert_eq!(bytes, b"/* text */\r\n");
+    assert_eq!(bytes, b"/* text */");
     // Block comments end at the first closing delimiter; nesting is not supported.
     assert!(parse("/* outer /* inner */ fun main() {}").is_ok());
 }
@@ -148,7 +148,7 @@ fn functions_forward_calls_and_named_results() {
     let program = parse("fun main() { var result = add(2,add(3,4)); print.newline(result); } fun add(a:int,b:int) r:int { r = a+b; return r; }").unwrap();
     assert_eq!(program.functions[1].parameters, 2);
     assert_eq!(program.functions[1].result, Some(2));
-    assert_eq!(program.functions[1].variables, 3);
+    assert_eq!(program.functions[1].types.len(), 3);
     assert!(parse("fun main() {} fun empty() r:int { r = 0; }").is_ok());
     assert!(parse("fun main() { var a = 1; a.clamp(0,100); }").is_ok());
 }
@@ -158,21 +158,21 @@ fn preserves_strings_comments_and_integer_boundaries() {
     let statements = main_statements(
         "// comment\nfun main() { print.sameline(\"Żółw // \\\"\\\\\\t\\0\"); print.newline(\"Hi\\n\"); var low = -9223372036854775808; var high = 9223372036854775807; }",
     );
-    let Statement::PrintString(bytes) = &statements[0] else {
+    let Statement::Print(Expr::String(bytes), false) = &statements[0] else {
         panic!("string expected");
     };
     assert_eq!(bytes, "Żółw // \"\\\t\0".as_bytes());
-    let Statement::PrintString(bytes) = &statements[1] else {
+    let Statement::Print(Expr::String(bytes), true) = &statements[1] else {
         panic!("string expected");
     };
-    assert_eq!(bytes, b"Hi\n\r\n");
+    assert_eq!(bytes, b"Hi\n");
     assert!(matches!(
         statements[2],
-        Statement::Assign(_, Expr::Integer(i64::MIN))
+        Statement::Assign(_, Expr::Integer(-9223372036854775808))
     ));
     assert!(matches!(
         statements[3],
-        Statement::Assign(_, Expr::Integer(i64::MAX))
+        Statement::Assign(_, Expr::Integer(9223372036854775807))
     ));
 }
 
@@ -190,16 +190,16 @@ fn rejects_invalid_programs_with_diagnostics() {
             "not declared",
         ),
         ("fun main() { var print = 1; }", "reserved words"),
-        ("fun main() { var a = 1.5; }", "expected Symbol(';')"),
+        ("fun main() { var a = 1.5.5; }", "expected Symbol(';')"),
         ("fun main() { var a = 1 }", "expected Symbol(';')"),
-        ("fun main() { var a = \"1\"; }", "integer expression"),
+        ("fun main() { var a = ; }", "expected an expression"),
         (
-            "fun main() { var a = 9223372036854775808; }",
-            "signed 64-bit",
+            "fun main() { var a = 999999999999999999999999999999999999999999; }",
+            "integer literal is too large",
         ),
         (
-            "fun main() { var a = -9223372036854775809; }",
-            "signed 64-bit",
+            "fun main() { var a = -999999999999999999999999999999999999999999; }",
+            "integer literal is too large",
         ),
         ("fun main() { a = 1; }", "not declared"),
         ("fun main() { a.clamp(0,1); }", "not declared"),
@@ -238,8 +238,8 @@ fn rejects_invalid_programs_with_diagnostics() {
             "expected Word(\"r\")",
         ),
         (
-            "fun main() {} fun f(a:float) r:int { r = 1; }",
-            "expected Word(\"int\")",
+            "fun main() {} fun f(a:offset) r:int { r = 1; }",
+            "unsupported type 'offset'",
         ),
         (
             "fun main() { print.newline(\"\\q\"); }",
