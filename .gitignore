@@ -1,0 +1,2 @@
+# Rust build artifacts. Keep Cargo.lock tracked for reproducible builds.
+/target/

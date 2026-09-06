@@ -1,0 +1,201 @@
+#[derive(Debug, PartialEq)]
+enum Token {
+    Word(String),
+    String(String),
+    Symbol(char),
+    End,
+}
+
+struct Parser<'a> {
+    source: &'a str,
+    offset: usize,
+}
+
+impl Parser<'_> {
+    fn error(&self, message: &str) -> String {
+        let prefix = &self.source[..self.offset];
+        let line = prefix.bytes().filter(|b| *b == b'\n').count() + 1;
+        let column = prefix.rsplit('\n').next().unwrap_or("").chars().count() + 1;
+        format!("{line}:{column}: {message}")
+    }
+    fn next(&mut self) -> Result<Token, String> {
+        loop {
+            while self.source[self.offset..].starts_with(char::is_whitespace) {
+                self.offset += self.source[self.offset..]
+                    .chars()
+                    .next()
+                    .unwrap()
+                    .len_utf8();
+            }
+            if self.source[self.offset..].starts_with("//") {
+                self.offset += self.source[self.offset..]
+                    .find('\n')
+                    .unwrap_or(self.source.len() - self.offset);
+            } else {
+                break;
+            }
+        }
+        let Some(ch) = self.source[self.offset..].chars().next() else {
+            return Ok(Token::End);
+        };
+        self.offset += ch.len_utf8();
+        if "(){}.;".contains(ch) {
+            return Ok(Token::Symbol(ch));
+        }
+        if ch.is_ascii_alphabetic() || ch == '_' {
+            let start = self.offset - 1;
+            while let Some(c) = self.source[self.offset..].chars().next() {
+                if !c.is_ascii_alphanumeric() && c != '_' {
+                    break;
+                }
+                self.offset += 1;
+            }
+            return Ok(Token::Word(self.source[start..self.offset].into()));
+        }
+        if ch == '"' {
+            let mut value = String::new();
+            while let Some(c) = self.source[self.offset..].chars().next() {
+                self.offset += c.len_utf8();
+                match c {
+                    '"' => return Ok(Token::String(value)),
+                    '\n' | '\r' => return Err(self.error("raw newline in string; use \\n")),
+                    '\\' => {
+                        let Some(escaped) = self.source[self.offset..].chars().next() else {
+                            return Err(self.error("unterminated escape"));
+                        };
+                        self.offset += escaped.len_utf8();
+                        value.push(match escaped {
+                            'n' => '\n',
+                            'r' => '\r',
+                            't' => '\t',
+                            '0' => '\0',
+                            '\\' => '\\',
+                            '"' => '"',
+                            _ => {
+                                return Err(self.error(
+                                    "unsupported escape; use \\n, \\r, \\t, \\0, \\\\ or \\\"",
+                                ));
+                            }
+                        });
+                    }
+                    _ => value.push(c),
+                }
+            }
+            return Err(self.error("unterminated string"));
+        }
+        Err(self.error(&format!("unexpected character {ch:?}")))
+    }
+    fn expect(&mut self, expected: Token) -> Result<(), String> {
+        let actual = self.next()?;
+        if actual == expected {
+            Ok(())
+        } else {
+            Err(self.error(&format!("expected {expected:?}, found {actual:?}")))
+        }
+    }
+}
+
+pub fn parse(source: &str) -> Result<Vec<Vec<u8>>, String> {
+    let mut p = Parser { source, offset: 0 };
+    p.expect(Token::Word("fun".into()))?;
+    p.expect(Token::Word("main".into()))?;
+    for c in ['(', ')', '{'] {
+        p.expect(Token::Symbol(c))?;
+    }
+    let mut statements = Vec::new();
+    loop {
+        match p.next()? {
+            Token::Symbol('}') => break,
+            Token::Word(word) if word == "print" => (),
+            other => {
+                return Err(p.error(&format!(
+                    "expected print statement or closing brace, found {other:?}"
+                )));
+            }
+        }
+        p.expect(Token::Symbol('.'))?;
+        let newline = match p.next()? {
+            Token::Word(word) if word == "newline" => true,
+            Token::Word(word) if word == "sameline" => false,
+            _ => return Err(p.error("expected newline or sameline")),
+        };
+        p.expect(Token::Symbol('('))?;
+        let Token::String(value) = p.next()? else {
+            return Err(p.error("expected a string literal"));
+        };
+        p.expect(Token::Symbol(')'))?;
+        p.expect(Token::Symbol(';'))?;
+        let mut bytes = value.into_bytes();
+        if newline {
+            bytes.extend_from_slice(b"\r\n");
+        }
+        statements.push(bytes);
+    }
+    p.expect(Token::End)?;
+    Ok(statements)
+}
+
+pub fn assembly(statements: &[Vec<u8>]) -> String {
+    let mut out = String::from(
+        "; Generated by Adamantium. Windows x64, UTF-8 output.\nbits 64\ndefault rel\nglobal main\nextern GetStdHandle\nextern SetConsoleOutputCP\nextern WriteFile\nextern ExitProcess\nsection .text\nmain:\n    sub rsp, 56\n    mov ecx, 65001\n    call SetConsoleOutputCP\n    mov ecx, -11\n    call GetStdHandle\n    mov [rsp + 40], rax\n",
+    );
+    for (i, bytes) in statements.iter().enumerate() {
+        if bytes.is_empty() {
+            continue;
+        }
+        out.push_str(&format!("    mov rcx, [rsp + 40]\n    lea rdx, [rel message_{i}]\n    mov r8d, {}\n    lea r9, [rsp + 48]\n    mov qword [rsp + 32], 0\n    call WriteFile\n    test eax, eax\n    jz write_error\n    cmp dword [rsp + 48], {}\n    jne write_error\n", bytes.len(), bytes.len()));
+    }
+    out.push_str("    xor ecx, ecx\n    call ExitProcess\nwrite_error:\n    mov ecx, 1\n    call ExitProcess\nsection .rdata\n");
+    for (i, bytes) in statements.iter().enumerate() {
+        if !bytes.is_empty() {
+            out.push_str(&format!("message_{i}:\n"));
+            for chunk in bytes.chunks(32) {
+                out.push_str("    db ");
+                out.push_str(
+                    &chunk
+                        .iter()
+                        .map(u8::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                );
+                out.push('\n');
+            }
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn parses_comments_unicode_and_escapes() {
+        assert_eq!(parse("// start\nfun main() { print.sameline(\"Żółw // \\\"\\\\\\t\\0\"); // comment\n print.newline(\"Hi\\n\"); }").unwrap(), vec!["Żółw // \"\\\t\0".as_bytes().to_vec(), b"Hi\n\r\n".to_vec()]);
+        assert!(parse("fun main() {}").unwrap().is_empty());
+    }
+    #[test]
+    fn rejects_unsupported_or_incomplete_programs() {
+        for input in [
+            "",
+            "fun add() {}",
+            "fun main(x) {}",
+            "fun main() {",
+            "fun main() {} fun main() {}",
+            "fun main() { print.newline(1); }",
+            "fun main() { print.newline(\"x\") }",
+            "fun main() { print.other(\"x\"); }",
+            "fun main() { print.newline(\"\\q\"); }",
+            "fun main() { print.newline(\"oops); }",
+        ] {
+            assert!(parse(input).is_err(), "accepted {input}");
+        }
+    }
+    #[test]
+    fn reports_line_and_column() {
+        assert!(
+            parse("fun main() {\n @\n}")
+                .unwrap_err()
+                .starts_with("2:3:")
+        );
+    }
+}
