@@ -41,6 +41,10 @@ Set `ADAMANTIUM_NASM` or `ADAMANTIUM_LINKER` to override a tool's executable
 path. A custom linker must support Microsoft LINK arguments and have access to
 `kernel32.lib` through its environment.
 
+A complete runnable project covering every currently supported language feature
+is available in [`example-project`](example-project). Run it from this directory
+with `cargo run -- run example-project`.
+
 ## Supported syntax
 
 ```text

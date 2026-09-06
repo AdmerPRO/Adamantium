@@ -1,0 +1,160 @@
+/*
+    Adamantium feature example.
+    Block comments can span multiple lines.
+*/
+
+enum Status {
+    ready,
+    running,
+    finished,
+}
+
+fun main() {
+    // print.sameline does not append a newline.
+    print.sameline("Hello, ");
+    print.newline("Adamantium!");
+
+    // Integer inference, explicit integer types, and aliases.
+    var inferred_integer = 10;
+    var signed8 = -8:i8;
+    var signed16 = -1600:i16;
+    var signed32 = -32000:i32;
+    var signed64 = -64000:i64;
+    var tiny_unsigned = 15:u4;
+    var unsigned8 = 200:u8;
+    var unsigned16 = 60000:u16;
+    var unsigned32 = 4000000000:u32;
+    var unsigned64 = 18446744073709551615:u64;
+    var integer_alias = 20:int;
+    var unsigned_alias = 30:u;
+
+    print.newline(inferred_integer);
+    print.newline(signed8);
+    print.newline(signed16);
+    print.newline(signed32);
+    print.newline(signed64);
+    print.newline(tiny_unsigned);
+    print.newline(unsigned8);
+    print.newline(unsigned16);
+    print.newline(unsigned32);
+    print.newline(unsigned64);
+    print.newline(integer_alias);
+    print.newline(unsigned_alias);
+
+    // Floating-point inference, explicit widths, and scientific notation.
+    var inferred_float = 1.5;
+    var single = 0.25:f32;
+    var double = 2.5:f64;
+    var float_alias = 3.5:float;
+    var precise = 1.25:f128;
+    var scientific = 1e3:f64;
+
+    print.newline(inferred_float);
+    print.newline(single);
+    print.newline(double);
+    print.newline(float_alias);
+    print.newline(precise);
+    print.newline(scientific);
+
+    // Checked numeric conversions retain the requested destination type.
+    var widened_integer = signed16:i64;
+    var integer_as_float = inferred_integer:f64;
+    var widened_float = single:f64;
+    print.newline(widened_integer);
+    print.newline(integer_as_float);
+    print.newline(widened_float);
+
+    // Strings are immutable values, but changeable variables can be reassigned.
+    variable changeable message = "Text with a tab:\tquote: \" and slash: \\" :string;
+    var copied_message = message;
+    message = identity_text("Changed text");
+    print.newline(message);
+    print.newline(copied_message);
+    print.newline("First line\nSecond line");
+
+    var enabled = true:bool;
+    enabled = invert(false);
+    var missing = None;
+    var returned_none = nothing();
+    print.newline(enabled);
+    print.newline(missing);
+    print.newline(returned_none);
+
+    // Variables are changeable by default. Both long and short aliases work.
+    var arithmetic = 20;
+    var ch explicit_changeable = 5;
+    arithmetic =+ explicit_changeable;
+    arithmetic =- 3;
+    arithmetic =* 2;
+    arithmetic =/ 4;
+    arithmetic = arithmetic + 1;
+    explicit_changeable = (2 + 3) * 4;
+    explicit_changeable = -5;
+    print.newline(arithmetic);
+    print.newline(explicit_changeable);
+
+    // clamp changes the current value once and uses inclusive bounds.
+    var limited = 150;
+    limited.clamp(0,100);
+    print.newline(limited);
+    limited = 150;
+    print.newline(limited);
+
+    // Static variables cannot be changed after initialization.
+    var static fixed = add(2,3);
+    var stc short_static = 7;
+    print.newline(fixed);
+    print.newline(short_static);
+
+    // Enum variants have their own enum type and print their zero-based index.
+    var status = Status.ready;
+    status = choose_status(Status.running);
+    print.newline(status);
+
+    // Calls can be nested inside expressions and arguments are passed by value.
+    var result = add(add(1,2), multiply(3,4));
+    print.newline(result);
+    print.newline(change_copy(inferred_integer));
+    print.newline(inferred_integer);
+    print.newline(explicit_return(21));
+
+    // A None-returning function can also be used as a standalone statement.
+    notify();
+}
+
+fun add(a:int,b:int) result:int {
+    result = a+b;
+}
+
+fun multiply(a:int,b:int) result:int {
+    result = a*b;
+}
+
+fun change_copy(value:int) result:int {
+    value =+ 1;
+    result = value;
+}
+
+fun explicit_return(value:int) result:int {
+    result = value*2;
+    return result;
+}
+
+fun identity_text(value:string) result:string {
+    result = value;
+}
+
+fun invert(value:bool) result:bool {
+    result = value;
+}
+
+fun choose_status(value:Status) result:Status {
+    result = value;
+}
+
+fun nothing() result:None {
+}
+
+fun notify() result:None {
+    print.newline("All current features completed.");
+}

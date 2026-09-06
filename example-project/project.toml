@@ -1,0 +1,4 @@
+name = "AdamantiumFeatures"
+version = "1.0.0"
+description = "A runnable example of every currently supported Adamantium feature"
+authors = ["Adamantium Developers"]

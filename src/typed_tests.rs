@@ -5,6 +5,11 @@ fn checked(source: &str) -> Result<Program, String> {
 }
 
 #[test]
+fn complete_example_project_stays_valid() {
+    checked(include_str!("../example-project/code/main.ad")).unwrap();
+}
+
+#[test]
 fn infers_default_types_and_accepts_aliases() {
     let program = checked(
         r#"fun main() {
