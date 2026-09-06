@@ -68,3 +68,16 @@ cargo fmt --check
 The release compiler is generated at `target\release\adamantium-compiler.exe`.
 `src/main.rs` handles configuration and external tools; `src/syntax.rs`
 handles parsing and assembly generation.
+
+## Continuous integration
+
+GitHub Actions runs on every push and pull request using Ubuntu, macOS, and
+Windows runners. Each runner checks formatting and compilation, checks spelling
+with Typos, runs Clippy with warnings treated as errors, runs the tests, and
+checks the compiler's `--help` command. The final step is `cargo build --locked
+--release`.
+
+Clippy provides Rust linting; Flake8 is intended for Python and is not used here.
+These checks build and test the compiler on all three systems. Generating and
+running Adamantium programs still requires the Windows x64 toolchain described
+above; the CLI smoke test does not invoke NASM or the Windows linker.
