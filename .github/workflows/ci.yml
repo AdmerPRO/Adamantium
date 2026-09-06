@@ -41,8 +41,13 @@ jobs:
       - name: Check compilation
         run: cargo check --locked --all-targets --all-features
 
+      - name: Install Typos
+        uses: taiki-e/install-action@v2
+        with:
+          tool: typos@1.49.0
+
       - name: Check spelling
-        uses: crate-ci/typos@v1.49.0
+        run: typos .
 
       - name: Lint Rust code
         run: cargo clippy --locked --all-targets --all-features -- -D warnings
