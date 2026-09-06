@@ -1,3 +1,4 @@
+mod codegen;
 mod syntax;
 
 use std::{
@@ -90,7 +91,7 @@ fn run() -> Result<(), String> {
     let asm = target.join(format!("{name}.asm"));
     let obj = target.join(format!("{name}.obj"));
     let exe = target.join(format!("{name}.exe"));
-    fs::write(&asm, syntax::assembly(&statements)).map_err(|e| e.to_string())?;
+    fs::write(&asm, codegen::assembly(&statements)).map_err(|e| e.to_string())?;
     let nasm = env::var_os("ADAMANTIUM_NASM").unwrap_or_else(|| {
         let installed = PathBuf::from(
             env::var_os("ProgramFiles").unwrap_or_else(|| "C:\\Program Files".into()),

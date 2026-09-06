@@ -43,13 +43,89 @@ fun main() {
     // Print without a line ending, then finish the line.
     print.sameline("Hello, ");
     print.newline("Adamantium!");
+    var a = 10;
+    var b = 20;
+    b =+ a;
+    b.clamp(0,100);
+    var result = add(a,b);
+    print.newline(result);
+}
+
+fun add(a:int,b:int) r:int {
+    r = a+b;
 }
 ```
 
-The language currently supports one parameterless `main` function,
-single-line comments, and string literals with UTF-8 text and escapes.
+The program requires exactly one parameterless `main` function and can declare
+additional functions with `int` parameters and a named `int` result.
+Single-line comments and string literals with UTF-8 text and escapes are supported.
 `print.newline` appends CRLF; `print.sameline` adds no line ending.
-Variables, expressions, additional functions and packages are not supported yet.
+Declare integer variables with `var a = 10;` and print them with
+`print.newline(a);` or `print.sameline(a);`. Values are signed 64-bit decimal
+integers, including negative numbers. Names are case-sensitive, start with an
+ASCII letter or underscore, and may then contain digits. Declare each name once,
+before using it; `fun`, `var`, `print`, `return`, and `int` are reserved words.
+
+### Arithmetic and assignment
+
+Initializers, assignments, print arguments, and function arguments accept integer
+expressions. `*` and `/` take precedence over `+` and `-`; operators at the same
+precedence are evaluated left to right. Parentheses override precedence.
+Division truncates toward zero, so `-7/2` is `-3`.
+
+```text
+var a = 10;
+var b = 20;
+b =+ a;        // b = b + a
+b =- a;        // b = b - a
+b =* a;        // b = b * a
+b =/ a;        // b = b / a
+b = a + b;
+b = (a + 2) * 3;
+b = -5;        // Assign a negative value (space after =).
+b = (-5);      // Parentheses also distinguish this from =-.
+```
+
+Compound operators are written together: `b =- 5;` subtracts 5, whereas
+`b = -5;` assigns -5. Their right-hand side can be a full expression.
+All calculations and function calls execute in the generated EXE.
+
+### Clamp
+
+```text
+var a = 150;
+a.clamp(0,100);
+print.newline(a); // 100
+a = 150;
+print.newline(a); // 150: clamp does not restrict future assignments.
+```
+
+`clamp` changes the current value once, using inclusive lower and upper bounds.
+Bounds can be integer expressions and are evaluated left to right.
+
+### Functions and named results
+
+```text
+fun add(a:int,b:int) r:int {
+    r = a+b;
+    return r; // Optional: exit immediately with the named result.
+}
+```
+
+The result variable is declared by the function signature. Assign it before
+returning; do not redeclare it with `var`. Reaching the closing brace implicitly
+returns that variable. `return r;` exits early and always refers to the result
+name declared in the signature; arbitrary return expressions are not supported.
+
+Functions can be declared before or after `main`, called from other functions,
+and nested inside expressions. Arguments are evaluated left to right and passed
+by value. Each call has its own local variables; changing a parameter does not
+change the caller's variable. Only `int` parameters and results are supported.
+`main` cannot be called by another function. Loops, conditionals, imports, and
+packages are not implemented yet.
+
+Division by zero, signed arithmetic overflow, and reversed clamp bounds stop the
+EXE with a diagnostic on stderr and exit code 2. Output failures use exit code 1.
 
 See the [project README](../README.md) for project configuration and string
 escape details.
@@ -65,9 +141,19 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 ```
 
+From the Windows x64 developer environment with NASM installed, also run the
+native regression tests. They compile temporary projects and verify EXE output
+and runtime failures:
+
+```bat
+cargo test --locked --test native -- --ignored
+```
+
 The release compiler is generated at `target\release\adamantium-compiler.exe`.
 `src/main.rs` handles configuration and external tools; `src/syntax.rs`
-handles parsing and assembly generation.
+handles parsing and semantic checks. `src/codegen.rs` generates assembly and
+`src/runtime.asm` implements output and runtime errors. Parser tests live in
+`src/syntax_tests.rs`, and native regression tests live in `tests/native.rs`.
 
 ## Continuous integration
 
@@ -80,4 +166,5 @@ checks the compiler's `--help` command. The final step is `cargo build --locked
 Clippy provides Rust linting; Flake8 is intended for Python and is not used here.
 These checks build and test the compiler on all three systems. Generating and
 running Adamantium programs still requires the Windows x64 toolchain described
-above; the CLI smoke test does not invoke NASM or the Windows linker.
+above. Windows CI additionally installs NASM, configures MSVC, and runs the native
+EXE regression tests before the final release build.

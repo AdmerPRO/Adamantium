@@ -53,5 +53,19 @@ jobs:
       - name: Check compiler CLI
         run: cargo run --locked -- --help
 
+      - name: Install NASM
+        if: runner.os == 'Windows'
+        run: choco install nasm --yes --no-progress
+
+      - name: Configure Windows x64 linker
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Test generated Windows executables
+        if: runner.os == 'Windows'
+        run: cargo test --locked --test native -- --ignored
+
       - name: Build release
         run: cargo build --locked --release

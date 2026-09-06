@@ -52,7 +52,8 @@ error messages.
   update it when dependency changes require it.
 
 `src/main.rs` handles project configuration and invokes NASM and the linker.
-`src/syntax.rs` parses source code, generates assembly, and contains parser tests.
+`src/syntax.rs` parses and validates source code; `src/syntax_tests.rs` tests it.
+`src/codegen.rs` generates assembly, and `src/runtime.asm` provides runtime helpers.
 The example project lives in `../adamantium-project`.
 
 ## Verify your work
@@ -62,6 +63,7 @@ For compiler changes, run:
 ```bat
 cargo fmt --check
 cargo test
+cargo test --locked --test native -- --ignored
 cargo clippy --all-targets -- -D warnings
 cargo run -- ../adamantium-project
 ..\adamantium-project\target\FirstProject.exe
