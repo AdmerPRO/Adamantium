@@ -1,6 +1,54 @@
 use super::*;
 
 #[test]
+fn block_comments_work_between_tokens_and_preserve_operators() {
+    let source = "/* header\nignored @ \" // text */fun/**/main() { var a = 12/* note * / */ / 3 * 2; print.newline(a); }/**/";
+    let plain = "fun main() { var a = 12 / 3 * 2; print.newline(a); }";
+    let tokens = |text| {
+        lex(text)
+            .unwrap()
+            .into_iter()
+            .map(|(token, _)| token)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(tokens(source), tokens(plain));
+    assert!(parse(source).is_ok());
+    assert!(parse("fun main() { var ab = 1; print.newline(a/**/b); }").is_err());
+}
+
+#[test]
+fn comment_delimiters_inside_strings_and_line_comments_are_literal() {
+    let statements =
+        main_statements("// /* not a block comment\nfun main() { print.newline(\"/* text */\"); }");
+    let Statement::PrintString(bytes) = &statements[0] else {
+        panic!("string expected");
+    };
+    assert_eq!(bytes, b"/* text */\r\n");
+    // Block comments end at the first closing delimiter; nesting is not supported.
+    assert!(parse("/* outer /* inner */ fun main() {}").is_ok());
+}
+
+#[test]
+fn block_comment_diagnostics_preserve_source_locations() {
+    for text in ["/*", "/* unfinished", "/* ends with *"] {
+        assert_eq!(
+            lex(text).unwrap_err(),
+            "1:1: unterminated block comment; expected '*/'"
+        );
+    }
+    assert_eq!(
+        parse("fun main() {\n  /* unfinished\n}").unwrap_err(),
+        "2:3: unterminated block comment; expected '*/'"
+    );
+    assert!(
+        parse("/* Żółw\r\ncomment */\r\nfun main() {\r\n @\r\n}")
+            .unwrap_err()
+            .starts_with("4:2:")
+    );
+    assert!(lex("/* Ż */@").unwrap_err().starts_with("1:8:"));
+}
+
+#[test]
 fn static_aliases_reject_every_mutation() {
     for modifier in ["static", "stc"] {
         for mutation in [

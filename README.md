@@ -58,13 +58,27 @@ fun add(a:int,b:int) r:int {
 
 The program requires exactly one parameterless `main` function and can declare
 additional functions with `int` parameters and a named `int` result.
-Single-line comments and string literals with UTF-8 text and escapes are supported.
+Single-line (`//`) and block (`/* ... */`) comments are supported, along with
+string literals with UTF-8 text and escapes.
 `print.newline` appends CRLF; `print.sameline` adds no line ending.
 Declare integer variables with `var a = 10;` and print them with
 `print.newline(a);` or `print.sameline(a);`. Values are signed 64-bit decimal
 integers, including negative numbers. Names are case-sensitive, start with an
 ASCII letter or underscore, and may then contain digits. Declare each name once,
 before using it; `fun`, `var`, `print`, `return`, and `int` are reserved words.
+
+### Comments
+
+```text
+// A single-line comment.
+/* A comment that spans
+   multiple lines. */
+var a = 10 /* inline comment */ + 2;
+```
+
+Block comments end at the first `*/` and do not nest. An unclosed comment reports
+the line and column of its opening `/*`. Comment delimiters inside strings are
+ordinary text.
 
 ### Changeable and static variables
 

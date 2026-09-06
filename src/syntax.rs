@@ -112,6 +112,27 @@ fn lex(source: &str) -> Result<Vec<(Token, Position)>, String> {
             }
             continue;
         }
+        if c == '/' && chars.peek() == Some(&'*') {
+            chars.next();
+            column += 1;
+            loop {
+                let c = chars
+                    .next()
+                    .ok_or_else(|| position.error("unterminated block comment; expected '*/'"))?;
+                if c == '\n' {
+                    line += 1;
+                    column = 1;
+                } else {
+                    column += 1;
+                }
+                if c == '*' && chars.peek() == Some(&'/') {
+                    chars.next();
+                    column += 1;
+                    break;
+                }
+            }
+            continue;
+        }
         let token = if c.is_ascii_alphabetic() || c == '_' {
             let mut word = c.to_string();
             while chars

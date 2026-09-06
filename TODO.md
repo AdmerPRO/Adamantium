@@ -125,8 +125,8 @@ Multi-line comments:
 ```
 
 * [x] Implement `//`
-* [ ] Implement `/* ... */`
-* [ ] Detect unterminated multi-line comments
+* [x] Implement `/* ... */` — non-nested block comments, including multiple lines
+* [x] Detect unterminated multi-line comments — report the opening line and column
 
 ---
 
