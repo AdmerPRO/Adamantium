@@ -18,7 +18,8 @@ fn invalid_access_and_imports_fail_before_codegen() {
         ),
     ] {
         fs::write(root.join("code/main.ad"), source).unwrap();
-        let output = Command::new(env!("CARGO_BIN_EXE_adamantium-compiler"))
+        let output = Command::new(env!("CARGO_BIN_EXE_adamantium"))
+            .arg("build")
             .arg(&root)
             .output()
             .unwrap();

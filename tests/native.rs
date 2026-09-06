@@ -15,7 +15,8 @@ fn native_warnings_do_not_block_builds() {
     let project = Project::new(
         "fun main() { var unused = 1; print.newline(value()); } fun value() r:int { r = 7; return r; print.newline(999); } fun unused_function() r:None {}",
     );
-    let build = Command::new(env!("CARGO_BIN_EXE_adamantium-compiler"))
+    let build = Command::new(env!("CARGO_BIN_EXE_adamantium"))
+        .arg("build")
         .arg(&project.0)
         .output()
         .unwrap();
@@ -153,17 +154,9 @@ impl Project {
         Self(root)
     }
     fn run(&self) -> std::process::Output {
-        let build = Command::new(env!("CARGO_BIN_EXE_adamantium-compiler"))
+        Command::new(env!("CARGO_BIN_EXE_adamantium"))
+            .arg("run")
             .arg(&self.0)
-            .output()
-            .unwrap();
-        assert!(
-            build.status.success(),
-            "compiler failed:\n{}\n{}",
-            String::from_utf8_lossy(&build.stdout),
-            String::from_utf8_lossy(&build.stderr)
-        );
-        Command::new(self.0.join("target/NativeTest.exe"))
             .output()
             .unwrap()
     }

@@ -3,6 +3,10 @@ name = "adamantium-compiler"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "adamantium"
+path = "src/main.rs"
+
 [dependencies]
 toml = "0.8"
 rustc_apfloat = "=0.2.3"

@@ -7,14 +7,16 @@ mod typed;
 mod types;
 
 use std::{
-    env, fs,
+    env,
+    ffi::OsString,
+    fs,
     path::{Path, PathBuf},
     process::{Command, ExitCode},
 };
 
 fn main() -> ExitCode {
-    match run() {
-        Ok(()) => ExitCode::SUCCESS,
+    match cli(env::args_os().skip(1).collect()) {
+        Ok(code) => code,
         Err(error) => {
             eprintln!("error: {error}");
             ExitCode::FAILURE
@@ -22,24 +24,99 @@ fn main() -> ExitCode {
     }
 }
 
-fn run() -> Result<(), String> {
-    let mut args = env::args_os().skip(1);
-    let first = args.next();
-    if first.as_deref().is_some_and(|a| a == "--help" || a == "-h") {
-        println!(
-            "Adamantium compiler (Windows x64)\nUsage: adamantium-compiler [PROJECT_DIRECTORY]\nDefault: ../adamantium-project relative to the compiler source directory.\nRequires NASM and the Visual Studio x64 Native Tools environment.\nOverride tools with ADAMANTIUM_NASM and ADAMANTIUM_LINKER."
-        );
-        return Ok(());
+const HELP: &str = "Adamantium compiler (Windows x64)\n\
+Usage:\n\
+  adamantium build [PROJECT_DIRECTORY]\n\
+  adamantium run [PROJECT_DIRECTORY]\n\
+  adamantium --help\n\
+  adamantium --version\n\n\
+PROJECT_DIRECTORY defaults to the current directory.\n\
+For compatibility, `adamantium PROJECT_DIRECTORY` is the same as `adamantium build PROJECT_DIRECTORY`.\n\
+Building requires NASM and the Visual Studio x64 Native Tools environment.\n\
+Override tools with ADAMANTIUM_NASM and ADAMANTIUM_LINKER.";
+
+enum Action {
+    Help,
+    Version,
+    Build(PathBuf),
+    Run(PathBuf),
+}
+
+fn cli(args: Vec<OsString>) -> Result<ExitCode, String> {
+    match action(args)? {
+        Action::Help => println!("{HELP}"),
+        Action::Version => println!("adamantium {}", env!("CARGO_PKG_VERSION")),
+        Action::Build(root) => {
+            let executable = build(&root)?;
+            println!("Built {}", executable.display());
+        }
+        Action::Run(root) => {
+            let executable = build(&root)?;
+            eprintln!("Built {}", executable.display());
+            let status = Command::new(&executable)
+                .current_dir(&root)
+                .status()
+                .map_err(|e| format!("could not run {}: {e}", executable.display()))?;
+            return Ok(status
+                .code()
+                .and_then(|code| u8::try_from(code).ok())
+                .map_or(ExitCode::FAILURE, ExitCode::from));
+        }
     }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn action(args: Vec<OsString>) -> Result<Action, String> {
+    let mut args = args.into_iter();
+    let Some(first) = args.next() else {
+        return Ok(Action::Help);
+    };
+    if first == "--help" || first == "-h" {
+        no_more_args(args)?;
+        return Ok(Action::Help);
+    }
+    if first == "--version" || first == "-V" {
+        no_more_args(args)?;
+        return Ok(Action::Version);
+    }
+    if first == "build" || first == "run" {
+        let root = args.next().map_or_else(current_directory, Ok)?;
+        no_more_args(args)?;
+        return if first == "build" {
+            Ok(Action::Build(root.into()))
+        } else {
+            Ok(Action::Run(root.into()))
+        };
+    }
+    if first.to_string_lossy().starts_with('-') {
+        return Err(format!(
+            "unknown option '{}'; use --help",
+            first.to_string_lossy()
+        ));
+    }
+    no_more_args(args)?;
+    Ok(Action::Build(first.into()))
+}
+
+fn current_directory() -> Result<OsString, String> {
+    env::current_dir()
+        .map(Into::into)
+        .map_err(|e| format!("could not read the current directory: {e}"))
+}
+
+fn no_more_args(mut args: impl Iterator<Item = OsString>) -> Result<(), String> {
     if args.next().is_some() {
-        return Err("expected at most one project directory; use --help".into());
+        Err("too many arguments; use --help".into())
+    } else {
+        Ok(())
     }
-    let root = first
-        .map(PathBuf::from)
-        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../adamantium-project"));
-    let root = root
+}
+
+fn build(root: &Path) -> Result<PathBuf, String> {
+    let requested_root = root;
+    let root = requested_root
         .canonicalize()
-        .map_err(|e| format!("{}: {e}", root.display()))?;
+        .map_err(|e| format!("{}: {e}", requested_root.display()))?;
     let project = read_toml(&root.join("project.toml"))?;
     let name = project
         .get("name")
@@ -147,8 +224,7 @@ fn run() -> Result<(), String> {
             .arg("kernel32.lib"),
         "Microsoft linker (run from an x64 Native Tools Command Prompt for Visual Studio)",
     )?;
-    println!("Built {}", exe.display());
-    Ok(())
+    Ok(exe)
 }
 
 fn read_toml(path: &Path) -> Result<toml::Table, String> {

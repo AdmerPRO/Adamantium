@@ -4,10 +4,10 @@
 
 ## 1. Project Foundation
 
-* [ ] Create the `adamantium` CLI
-* [ ] Add version information
+* [x] Create the `adamantium` CLI — `build` and `run` with an optional project directory
+* [x] Add version information
 * [x] Add `--help`
-* [ ] Add `--version`
+* [x] Add `--version`
 * [x] Add compiler error handling
 * [x] Add compiler warning system — nonfatal warnings with codes and source locations
 * [x] Create basic documentation structure
@@ -1020,16 +1020,16 @@ adamantium clean
 adamantium clear
 ```
 
-* [ ] Implement `run`
-* [ ] Implement `build`
+* [x] Implement `run`
+* [x] Implement `build`
 * [ ] Implement `check`
 * [ ] Implement `install`
 * [ ] Implement `test`
 * [ ] Implement `clean`
 * [ ] Implement `clear`
 * [ ] Make `clean` and `clear` aliases
-* [ ] Add command error handling
-* [ ] Add command help
+* [x] Add command error handling — unknown options and excess arguments are rejected
+* [x] Add command help — top-level help documents the available commands
 
 ---
 
@@ -1201,8 +1201,8 @@ Create the official standard library.
 * [ ] `adamantium fmt`
 * [ ] `adamantium test`
 * [ ] `adamantium check`
-* [ ] `adamantium build`
-* [ ] `adamantium run`
+* [x] `adamantium build`
+* [x] `adamantium run`
 * [ ] `adamantium install`
 * [ ] `adamantium clean`
 * [ ] `adamantium doctor`

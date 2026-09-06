@@ -11,21 +11,25 @@ and builds a native Windows x64 console executable.
 
 ## Usage
 
-Open **x64 Native Tools Command Prompt for VS 2022** and change into this
-`compiler` directory. Compile and run the included example:
+Install the CLI from the `compiler` directory using an **x64 Native Tools
+Command Prompt for VS 2022**:
 
 ```bat
-cargo run -- ../adamantium-project
-..\adamantium-project\target\FirstProject.exe
+cargo install --path .
 ```
 
-Running `cargo run` without a project argument also builds the included
-example. To compile a different project or show help:
+Then change into an Adamantium project directory and build or run it:
 
 ```bat
-cargo run -- "C:\path\to\project"
-cargo run -- --help
+adamantium build
+adamantium run
 ```
+
+Both commands accept an optional project directory, for example
+`adamantium run "C:\path\to\project"`. Without one they use the current
+directory. `adamantium PROJECT_DIRECTORY` remains an alias for
+`adamantium build PROJECT_DIRECTORY`. Run `adamantium --help` or
+`adamantium --version` for CLI information.
 
 The compiler reads `code/main.ad`, `project.toml` and `requirement.toml`
 from the project directory. It writes `<name>.asm`, `<name>.obj` and
@@ -272,7 +276,7 @@ and runtime failures:
 cargo test --locked --test native -- --ignored
 ```
 
-The release compiler is generated at `target\release\adamantium-compiler.exe`.
+The release compiler is generated at `target\release\adamantium.exe`.
 `src/main.rs` handles configuration and external tools; `src/syntax.rs`
 handles parsing and name checks. `src/typed.rs` checks types and conversions.
 `src/codegen.rs` generates NASM assembly; `src/runtime.asm` provides the entry
