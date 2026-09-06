@@ -9,6 +9,35 @@ use std::{
 
 static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 
+#[test]
+#[ignore = "requires NASM and the Visual Studio x64 developer environment"]
+fn native_static_and_changeable_variables() {
+    let output = Project::new(
+        r#"
+        fun main() {
+            var static a = 10;
+            var stc b = add(a,5);
+            var ch c = b;
+            c =+ 5;
+            c.clamp(0,18);
+            print.newline(a);
+            print.newline(b);
+            print.newline(c);
+            print.newline(change(a));
+            print.newline(a);
+            print.newline(local());
+            print.newline(local());
+        }
+        fun add(a:int,b:int) r:int { r = a+b; }
+        fun change(a:int) r:int { a =+ 1; r = a; }
+        fun local() r:int { var static a = 7; r = a; }
+    "#,
+    )
+    .run();
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"10\r\n15\r\n18\r\n11\r\n10\r\n7\r\n7\r\n");
+}
+
 struct Project(PathBuf);
 impl Project {
     fn new(source: &str) -> Self {

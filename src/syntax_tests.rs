@@ -1,5 +1,42 @@
 use super::*;
 
+#[test]
+fn static_aliases_reject_every_mutation() {
+    for modifier in ["static", "stc"] {
+        for mutation in [
+            "a = 20;",
+            "a =+ 1;",
+            "a =- 1;",
+            "a =* 2;",
+            "a =/ 2;",
+            "a.clamp(0,100);",
+        ] {
+            let source = format!("fun main() {{\nvar {modifier} a = 10;\n{mutation}\n}}");
+            let error = parse(&source).unwrap_err();
+            assert_eq!(error, "3:1: cannot modify static variable 'a'", "{source}");
+        }
+        assert!(parse(&format!("fun main() {{ var {modifier} a = add(2,3); print.newline(a); }} fun add(a:int,b:int) r:int {{ r = a+b; }}")).is_ok());
+    }
+}
+
+#[test]
+fn changeable_variables_keep_existing_behavior() {
+    for modifier in ["", "ch"] {
+        let source = format!(
+            "fun main() {{ var {modifier} a = 10; a = 20; a =+ 1; a =- 1; a =* 2; a =/ 2; a.clamp(0,100); }}"
+        );
+        assert!(parse(&source).is_ok(), "{source}");
+    }
+    for declaration in [
+        "var static ch a = 1;",
+        "var ch static a = 1;",
+        "var stc static a = 1;",
+        "var static = 1;",
+    ] {
+        assert!(parse(&format!("fun main() {{ {declaration} }}")).is_err());
+    }
+}
+
 fn main_statements(source: &str) -> Vec<Statement> {
     parse(source)
         .unwrap()

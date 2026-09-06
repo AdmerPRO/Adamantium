@@ -66,6 +66,25 @@ integers, including negative numbers. Names are case-sensitive, start with an
 ASCII letter or underscore, and may then contain digits. Declare each name once,
 before using it; `fun`, `var`, `print`, `return`, and `int` are reserved words.
 
+### Changeable and static variables
+
+```text
+var a = 10;         // Changeable by default.
+var ch b = 10;      // Explicitly changeable (ch = changeable).
+var static c = 10;  // Cannot be modified after initialization.
+var stc d = 10;     // Short form of static.
+a = 20;
+b =+ 5;
+print.newline(c);
+```
+
+`static` and `stc` prevent reassignment, compound assignment, and `clamp` on that
+variable. Its initializer can be an expression or a function call. Here `static`
+means immutable, not shared storage: the variable remains local to each function
+call. Passing its value to a function does not make the parameter immutable.
+`static`, `stc`, and `ch` are reserved words, and a declaration accepts at most
+one of these modifiers.
+
 ### Arithmetic and assignment
 
 Initializers, assignments, print arguments, and function arguments accept integer

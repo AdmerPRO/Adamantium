@@ -81,6 +81,7 @@ pub struct Program {
 struct Binding {
     slot: usize,
     initialized: bool,
+    changeable: bool,
 }
 struct Parser {
     tokens: Vec<(Token, Position)>,
@@ -209,7 +210,10 @@ impl Parser {
         let position = self.position();
         match self.next() {
             Token::Word(name)
-                if !["fun", "var", "print", "return", "int"].contains(&name.as_str()) =>
+                if ![
+                    "fun", "var", "print", "return", "int", "static", "stc", "ch",
+                ]
+                .contains(&name.as_str()) =>
             {
                 Ok(name)
             }
@@ -220,13 +224,21 @@ impl Parser {
         &mut self,
         name: String,
         initialized: bool,
+        changeable: bool,
         position: Position,
     ) -> Result<usize, String> {
         if self.bindings.contains_key(&name) {
             return Err(position.error(format!("variable '{name}' is already declared")));
         }
         let slot = self.bindings.len();
-        self.bindings.insert(name, Binding { slot, initialized });
+        self.bindings.insert(
+            name,
+            Binding {
+                slot,
+                initialized,
+                changeable,
+            },
+        );
         Ok(slot)
     }
     fn variable(&self, name: &str, read: bool, position: Position) -> Result<usize, String> {
@@ -238,6 +250,13 @@ impl Parser {
             return Err(position.error(format!("variable '{name}' is not initialized")));
         }
         Ok(binding.slot)
+    }
+    fn writable_variable(&self, name: &str, position: Position) -> Result<usize, String> {
+        let slot = self.variable(name, false, position)?;
+        if !self.bindings[name].changeable {
+            return Err(position.error(format!("cannot modify static variable '{name}'")));
+        }
+        Ok(slot)
     }
     fn arguments(&mut self, name: String, position: Position) -> Result<Call, String> {
         self.symbol('(')?;
@@ -314,10 +333,18 @@ impl Parser {
         let position = self.position();
         let statement = match self.next() {
             Token::Word(word) if word == "var" => {
+                let changeable = if self.take(Token::Word("static".into()))
+                    || self.take(Token::Word("stc".into()))
+                {
+                    false
+                } else {
+                    self.take(Token::Word("ch".into()));
+                    true
+                };
                 let name = self.name()?;
                 self.symbol('=')?;
                 let value = self.expression(0)?;
-                let slot = self.bind(name, true, position)?;
+                let slot = self.bind(name, true, changeable, position)?;
                 Statement::Assign(slot, value)
             }
             Token::Word(word) if word == "print" => {
@@ -353,6 +380,7 @@ impl Parser {
                 if self.peek() == &Token::Symbol('(') {
                     Statement::Call(self.arguments(name, position)?)
                 } else if self.take(Token::Symbol('.')) {
+                    self.writable_variable(&name, position)?;
                     let slot = self.variable(&name, true, position)?;
                     self.word("clamp")?;
                     self.symbol('(')?;
@@ -362,7 +390,7 @@ impl Parser {
                     self.symbol(')')?;
                     Statement::Clamp(slot, low, high)
                 } else {
-                    let slot = self.variable(&name, false, position)?;
+                    let slot = self.writable_variable(&name, position)?;
                     let equals = self.position();
                     self.symbol('=')?;
                     // Compound operators must be adjacent: =- differs from = -value.
@@ -404,7 +432,7 @@ impl Parser {
                 let parameter = self.name()?;
                 self.symbol(':')?;
                 self.word("int")?;
-                self.bind(parameter, true, position)?;
+                self.bind(parameter, true, true, position)?;
                 if self.take(Token::Symbol(')')) {
                     break;
                 }
@@ -422,7 +450,7 @@ impl Parser {
             let result_name = self.name()?;
             self.symbol(':')?;
             self.word("int")?;
-            let slot = self.bind(result_name.clone(), false, position)?;
+            let slot = self.bind(result_name.clone(), false, true, position)?;
             self.result_name = Some(result_name);
             Some(slot)
         };
