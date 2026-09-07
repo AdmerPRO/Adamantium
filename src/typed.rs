@@ -35,6 +35,11 @@ pub enum Instruction {
     Until(Expression, Vec<Instruction>),
     Loop(Vec<Instruction>),
     For(usize, Expression, Expression, Vec<Instruction>),
+    Match(
+        Expression,
+        Vec<(Expression, Vec<Instruction>)>,
+        Option<Vec<Instruction>>,
+    ),
     Break,
     Continue,
     Return,
@@ -519,6 +524,42 @@ impl Checker<'_> {
                         .map(|s| self.statement(s))
                         .collect::<Result<_, _>>()?,
                 )
+            }
+            Statement::Match(value, arms, fallback) => {
+                let value = self.expression(value, None)?;
+                if matches!(value.ty, Type::String | Type::Class(_)) {
+                    return Err(format!("match is not supported for {}", value.ty));
+                }
+                let mut typed_arms = Vec::new();
+                let mut patterns = Vec::new();
+                for (pattern, body) in arms {
+                    let pattern = self.expression(pattern, Some(value.ty))?;
+                    let Kind::Constant(pattern_value) = pattern.kind else {
+                        return Err("match patterns must be literals or enum variants".into());
+                    };
+                    if patterns.contains(&pattern_value) {
+                        return Err("match contains a duplicate pattern".into());
+                    }
+                    patterns.push(pattern_value);
+                    typed_arms.push((
+                        Expression {
+                            ty: pattern.ty,
+                            kind: Kind::Constant(pattern_value),
+                        },
+                        body.iter()
+                            .map(|s| self.statement(s))
+                            .collect::<Result<_, String>>()?,
+                    ));
+                }
+                let fallback = fallback
+                    .as_ref()
+                    .map(|body| {
+                        body.iter()
+                            .map(|s| self.statement(s))
+                            .collect::<Result<_, String>>()
+                    })
+                    .transpose()?;
+                Instruction::Match(value, typed_arms, fallback)
             }
             Statement::Break => Instruction::Break,
             Statement::Continue => Instruction::Continue,

@@ -313,6 +313,24 @@ impl Generator {
                     self.emit(format!("    jmp {condition}\n{end}:"));
                     self.loop_stack.pop();
                 }
+                Instruction::Match(value, arms, fallback) => {
+                    self.expression(value);
+                    let matched_value = self.save();
+                    let end = self.label("match_end");
+                    for (pattern, body) in arms {
+                        let next = self.label("match_next");
+                        self.expression(pattern);
+                        let pattern = self.save();
+                        self.evaluate(7, value.ty, value.ty, &[matched_value, pattern]);
+                        self.emit(format!("    test rax, rax\n    jz {next}"));
+                        self.instructions(body, function);
+                        self.emit(format!("    jmp {end}\n{next}:"));
+                    }
+                    if let Some(body) = fallback {
+                        self.instructions(body, function);
+                    }
+                    self.emit(format!("{end}:"));
+                }
                 Instruction::Break => {
                     self.emit(format!("    jmp {}", self.loop_stack.last().unwrap().1))
                 }

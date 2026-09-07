@@ -391,3 +391,31 @@ fn parses_conditions_and_all_loop_forms() {
             .contains("inside a loop")
     );
 }
+
+#[test]
+fn parses_match_branches_and_fallback() {
+    let program = parse(
+        r#"enum State { ready, done } fun main() {
+        var state = State.ready;
+        match state {
+            State.ready => { print.newline("ready"); },
+            State.done => { print.newline("done"); }
+            _ => { print.newline("unknown"); }
+        }
+    }"#,
+    )
+    .unwrap();
+    assert!(
+        matches!(program.functions[0].statements[1], Statement::Match(_, ref arms, Some(_)) if arms.len() == 2)
+    );
+    assert!(
+        parse("fun main() { match 1 {} }")
+            .unwrap_err()
+            .contains("at least one branch")
+    );
+    assert!(
+        parse("fun main() { match 1 { _ => {} 1 => {} } }")
+            .unwrap_err()
+            .contains("must be last")
+    );
+}

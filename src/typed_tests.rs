@@ -215,3 +215,13 @@ fn checks_comparisons_conditions_and_integer_ranges() {
         assert!(checked(source).is_err(), "accepted {source}");
     }
 }
+
+#[test]
+fn match_patterns_must_have_the_matched_type() {
+    assert!(checked("fun main() { match 2 { 1 => {} 2 => {} _ => {} } }").is_ok());
+    assert!(checked("enum Choice { yes, no } fun main() { var c=Choice.yes; match c { Choice.yes => {} _ => {} } }").is_ok());
+    assert!(checked("fun main() { match 1 { true => {} } }").is_err());
+    assert!(checked("fun main() { match \"text\" { \"text\" => {} } }").is_err());
+    assert!(checked("fun main() { match 1 { 1 => {} 1 => {} } }").is_err());
+    assert!(checked("fun main() { var pattern=1; match 1 { pattern => {} } }").is_err());
+}

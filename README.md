@@ -22,6 +22,8 @@ Then change into an Adamantium project directory and build or run it:
 ```bat
 adamantium build
 adamantium run
+adamantium new MyProject
+adamantium new "C:\path\to\MyProject"
 ```
 
 Both commands accept an optional project directory, for example
@@ -283,6 +285,24 @@ loop {
     continue;
 }
 ```
+
+`match` selects the first branch whose pattern equals the matched value. Patterns
+must have the same type as the value. The optional `_` fallback must be last.
+
+```text
+match status {
+    Status.ready => { print.newline("Ready"); }
+    Status.finished => { print.newline("Finished"); }
+    _ => { print.newline("Another status"); }
+}
+```
+
+### Creating a project
+
+`adamantium new MyProject` creates `MyProject` inside the current directory.
+A relative or absolute path creates the project at that exact path. The command
+creates `project.toml`, `requirement.toml`, `code/main.ad`, `target`, and
+`.gitignore`. It refuses to overwrite an existing path.
 
 ### Clamp
 

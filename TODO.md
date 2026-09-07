@@ -526,12 +526,13 @@ match value {
 }
 ```
 
-* [ ] Implement `match`
-* [ ] Implement pattern matching
-* [ ] Implement wildcard `_`
-* [ ] Implement enum matching
+* [x] Implement `match`
+* [x] Implement literal and enum pattern matching
+* [x] Implement wildcard `_`
+* [x] Implement enum matching
 * [ ] Detect non-exhaustive matches where required
-* [ ] Detect unreachable match branches
+* [x] Detect unreachable branches after wildcard `_`
+* [x] Detect duplicate match patterns
 
 ---
 
@@ -1028,10 +1029,12 @@ adamantium test run
 adamantium test list
 adamantium clean
 adamantium clear
+adamantium new <project_name_or_path>
 ```
 
 * [x] Implement `run`
 * [x] Implement `build`
+* [x] Implement `new`
 * [ ] Implement `check`
 * [ ] Implement `install`
 * [ ] Implement `test`
@@ -1096,7 +1099,7 @@ Adamantium must remain memory-safe.
 * [ ] Implement memory management
 * [x] Implement string runtime — immutable literal storage and value copies; string operations are pending
 * [ ] Implement list runtime
-* [ ] Implement object runtime
+* [x] Implement object runtime — allocation and independent class-value copying
 * [x] Report arithmetic overflow, division by zero, and invalid clamp ranges
 * [ ] Implement error runtime
 * [ ] Optimize runtime overhead
@@ -1109,9 +1112,9 @@ Adamantium must remain memory-safe.
 * [x] Generate functions
 * [x] Generate variables — typed local values in stack slots
 * [x] Generate arithmetic
-* [ ] Generate comparisons
-* [ ] Generate branches
-* [ ] Generate loops
+* [x] Generate comparisons
+* [x] Generate branches
+* [x] Generate loops
 * [x] Generate function calls
 * [x] Generate returns
 * [x] Generate classes — runtime-backed field storage, method calls and independent copies
@@ -1172,7 +1175,7 @@ Create the official standard library.
 * [x] Types — supported scalar types, defaults, and suffix annotations
 * [x] Functions — typed parameters and named-result behavior
 * [x] Classes
-* [ ] Enums
+* [x] Enums
 * [ ] Modules
 * [ ] Packages
 * [ ] Aliases
@@ -1231,6 +1234,7 @@ Create the official standard library.
 * [x] Run static analysis
 * [x] Check spelling with Typos on all three CI runners
 * [x] Build release binaries
+* [x] Test installed CLI on Windows x86-64 — help, version, build and run
 * [x] Test Windows — compiler checks and native EXE regression tests configured
 * [x] Test Linux — compiler build/tests configured; no Linux program backend
 * [x] Test macOS — compiler build/tests configured; no macOS program backend
@@ -1249,13 +1253,13 @@ Create the official standard library.
 * [x] Semantic analysis tests
 * [ ] Module tests
 * [x] Class tests — parsing, typing, visibility, construction, mutation and native copying
-* [ ] Enum tests
+* [x] Enum tests
 * [ ] Alias tests
 * [ ] Memory-safety tests
 * [x] Code generation tests
 * [x] NASM generation tests
 * [x] Runtime tests
-* [ ] CLI tests
+* [x] CLI tests — command parsing and installed Windows x86-64 CLI workflow
 * [x] Integration tests
 * [x] Regression tests
 
@@ -1266,7 +1270,7 @@ Create the official standard library.
 Create clear compiler diagnostics.
 
 * [ ] Error codes
-* [ ] Warning codes
+* [x] Warning codes
 * [x] Source locations
 * [x] Line and column information
 * [ ] Error highlighting
@@ -1369,35 +1373,36 @@ The recommended implementation order is:
 1. [x] Lexer
 2. [x] Parser
 3. [x] AST
-4. [ ] Variables
-5. [ ] Types
-6. [ ] Type checker
-7. [ ] Functions
-8. [ ] `if`
-9. [ ] `match`
-10. [ ] `for`
-11. [ ] `while`
-12. [ ] `loop`
-13. [ ] Modules / `pack` / `use`
-14. [ ] Classes
-15. [ ] Enums
-16. [ ] Memory-safety model
-17. [ ] Alias system
-18. [x] NASM code generation
-19. [x] Linker integration
-20. [ ] `adamantium build`
-21. [ ] `adamantium run`
-22. [ ] `adamantium check`
-23. [ ] Test system
-24. [ ] `AdamantiumFiles`
-25. [ ] `AdamantiumJson`
-26. [ ] Package manager
-27. [ ] `adamantium-async`
-28. [ ] Async compiler support
-29. [ ] Generics
-30. [ ] Traits
-31. [ ] Optimization
-32. [ ] Documentation
-33. [ ] VS Code support
-34. [ ] CI/CD
-35. [ ] Stable release
+4. [x] Variables
+5. [x] Types — current scalar, enum and class types
+6. [x] Type checker
+7. [x] Functions
+8. [x] `if`
+9. [x] `match`
+10. [x] `for`
+11. [x] `while`
+12. [x] `until`
+13. [x] `loop`
+14. [ ] Modules / `pack` / `use`
+15. [x] Classes
+16. [x] Enums
+17. [ ] Memory-safety model
+18. [ ] Alias system
+19. [x] NASM code generation
+20. [x] Linker integration
+21. [x] `adamantium build`
+22. [x] `adamantium run`
+23. [ ] `adamantium check`
+24. [ ] Test system
+25. [ ] `AdamantiumFiles`
+26. [ ] `AdamantiumJson`
+27. [ ] Package manager
+28. [ ] `adamantium-async`
+29. [ ] Async compiler support
+30. [ ] Generics
+31. [ ] Traits
+32. [ ] Optimization
+33. [ ] Documentation
+34. [ ] VS Code support
+35. [ ] CI/CD
+36. [ ] Stable release

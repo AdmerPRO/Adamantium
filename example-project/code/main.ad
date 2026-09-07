@@ -149,6 +149,12 @@ fun main() {
     var status = Status.ready;
     status = choose_status(Status.running);
     print.newline(status);
+    match status {
+        Status.ready => { print.newline("Ready"); }
+        Status.running => { print.newline("Running"); }
+        Status.finished => { print.newline("Finished"); }
+        _ => { print.newline("Unknown status"); }
+    }
 
     // Classes initialize named fields, call __new__, and copy by value.
     var first_counter = Counter(value=1,step=2);

@@ -67,3 +67,10 @@ jobs:
 
           adamantium run example-project
           if ($LASTEXITCODE -ne 0) { throw 'adamantium run failed.' }
+
+          $newProject = Join-Path $env:RUNNER_TEMP 'CreatedByAdamantium'
+          adamantium new $newProject
+          if ($LASTEXITCODE -ne 0) { throw 'adamantium new failed.' }
+          if (-not (Test-Path (Join-Path $newProject 'code/main.ad'))) {
+            throw 'adamantium new did not create code/main.ad.'
+          }

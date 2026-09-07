@@ -91,6 +91,7 @@ pub enum Statement {
     Until(Expr, Vec<Statement>),
     Loop(Vec<Statement>),
     For(usize, Expr, Expr, Vec<Statement>),
+    Match(Expr, Vec<(Expr, Vec<Statement>)>, Option<Vec<Statement>>),
     Break,
     Continue,
     Return,
@@ -348,6 +349,7 @@ impl Parser {
                     "loop",
                     "break",
                     "continue",
+                    "match",
                 ]
                 .contains(&name.as_str())
                     && Type::parse(&name).is_none() =>
@@ -622,7 +624,10 @@ impl Parser {
         self.reject_import()?;
         let position = self.position();
         if let Token::Word(keyword) = self.peek()
-            && matches!(keyword.as_str(), "if" | "while" | "until" | "loop" | "for")
+            && matches!(
+                keyword.as_str(),
+                "if" | "while" | "until" | "loop" | "for" | "match"
+            )
         {
             return self.control_statement();
         }
@@ -791,6 +796,39 @@ impl Parser {
                 let end = self.expression(0)?;
                 let slot = self.bind(name, true, false, None, name_position)?;
                 Statement::For(slot, start, end, self.loop_block()?)
+            }
+            "match" => {
+                let value = self.expression(0)?;
+                self.symbol('{')?;
+                let mut arms = Vec::new();
+                let mut fallback = None;
+                while !self.take(Token::Symbol('}')) {
+                    if self.peek() == &Token::Word("_".into()) {
+                        let fallback_position = self.position();
+                        self.next();
+                        if fallback.is_some() {
+                            return Err(
+                                fallback_position.error("match can contain only one '_' branch")
+                            );
+                        }
+                        self.symbol('=')?;
+                        self.symbol('>')?;
+                        fallback = Some(self.block()?);
+                    } else {
+                        let pattern = self.expression(0)?;
+                        self.symbol('=')?;
+                        self.symbol('>')?;
+                        arms.push((pattern, self.block()?));
+                    }
+                    self.take(Token::Symbol(','));
+                    if fallback.is_some() && self.peek() != &Token::Symbol('}') {
+                        return Err(self.position().error("the '_' match branch must be last"));
+                    }
+                }
+                if arms.is_empty() && fallback.is_none() {
+                    return Err(position.error("match must contain at least one branch"));
+                }
+                Statement::Match(value, arms, fallback)
             }
             _ => return Err(position.error("expected a control-flow statement")),
         })
@@ -1154,6 +1192,20 @@ pub fn parse(source: &str) -> Result<Program, String> {
                 validate_expr(end, signatures)?;
                 for statement in body {
                     validate_statement(statement, signatures)?;
+                }
+            }
+            Statement::Match(value, arms, fallback) => {
+                validate_expr(value, signatures)?;
+                for (pattern, body) in arms {
+                    validate_expr(pattern, signatures)?;
+                    for statement in body {
+                        validate_statement(statement, signatures)?;
+                    }
+                }
+                if let Some(body) = fallback {
+                    for statement in body {
+                        validate_statement(statement, signatures)?;
+                    }
                 }
             }
             _ => (),

@@ -11,6 +11,33 @@ static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_match_selects_the_first_matching_branch() {
+    let output = Project::new(
+        r#"
+        enum Choice { first, second }
+        fun main() {
+            var choice = Choice.second;
+            match choice {
+                Choice.first => { print.newline("first"); }
+                Choice.second => { print.newline("second"); }
+                _ => { print.newline("fallback"); }
+            }
+            match 9 { 1 => { print.newline("one"); } _ => { print.newline("other"); } }
+        }
+    "#,
+    )
+    .run();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"second\r\nother\r\n");
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_conditions_and_loops() {
     let output = Project::new(
         r#"

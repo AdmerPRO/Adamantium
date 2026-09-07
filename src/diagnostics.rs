@@ -60,6 +60,20 @@ pub fn warnings(program: &Program) -> Vec<String> {
                         visit_statement(statement, &mut declared, &mut reads, &mut calls);
                     }
                 }
+                Statement::Match(value, arms, fallback) => {
+                    visit(value, &mut reads, &mut calls);
+                    for (pattern, body) in arms {
+                        visit(pattern, &mut reads, &mut calls);
+                        for statement in body {
+                            visit_statement(statement, &mut declared, &mut reads, &mut calls);
+                        }
+                    }
+                    if let Some(body) = fallback {
+                        for statement in body {
+                            visit_statement(statement, &mut declared, &mut reads, &mut calls);
+                        }
+                    }
+                }
                 Statement::Break | Statement::Continue => (),
                 Statement::Return => returned = true,
             }
@@ -191,6 +205,20 @@ fn visit_statement(
             visit(end, reads, calls);
             for s in body {
                 visit_statement(s, declared, reads, calls);
+            }
+        }
+        Statement::Match(value, arms, fallback) => {
+            visit(value, reads, calls);
+            for (pattern, body) in arms {
+                visit(pattern, reads, calls);
+                for statement in body {
+                    visit_statement(statement, declared, reads, calls);
+                }
+            }
+            if let Some(body) = fallback {
+                for statement in body {
+                    visit_statement(statement, declared, reads, calls);
+                }
             }
         }
         Statement::Break | Statement::Continue | Statement::Return => (),

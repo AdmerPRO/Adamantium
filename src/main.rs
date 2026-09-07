@@ -28,6 +28,7 @@ const HELP: &str = "Adamantium compiler (Windows x64)\n\
 Usage:\n\
   adamantium build [PROJECT_DIRECTORY]\n\
   adamantium run [PROJECT_DIRECTORY]\n\
+  adamantium new <PROJECT_NAME_OR_PATH>\n\
   adamantium --help\n\
   adamantium --version\n\n\
 PROJECT_DIRECTORY defaults to the current directory.\n\
@@ -40,6 +41,7 @@ enum Action {
     Version,
     Build(PathBuf),
     Run(PathBuf),
+    New(PathBuf),
 }
 
 fn cli(args: Vec<OsString>) -> Result<ExitCode, String> {
@@ -62,6 +64,10 @@ fn cli(args: Vec<OsString>) -> Result<ExitCode, String> {
                 .and_then(|code| u8::try_from(code).ok())
                 .map_or(ExitCode::FAILURE, ExitCode::from));
         }
+        Action::New(root) => {
+            create_project(&root)?;
+            println!("Created Adamantium project at {}", root.display());
+        }
     }
     Ok(ExitCode::SUCCESS)
 }
@@ -78,6 +84,13 @@ fn action(args: Vec<OsString>) -> Result<Action, String> {
     if first == "--version" || first == "-V" {
         no_more_args(args)?;
         return Ok(Action::Version);
+    }
+    if first == "new" {
+        let root = args
+            .next()
+            .ok_or("adamantium new requires a project name or path; use --help")?;
+        no_more_args(args)?;
+        return Ok(Action::New(root.into()));
     }
     if first == "build" || first == "run" {
         let root = args.next().map_or_else(current_directory, Ok)?;
@@ -96,6 +109,58 @@ fn action(args: Vec<OsString>) -> Result<Action, String> {
     }
     no_more_args(args)?;
     Ok(Action::Build(first.into()))
+}
+
+fn valid_project_name(name: &str) -> Result<(), String> {
+    if name.is_empty()
+        || !name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+    {
+        return Err(
+            "project name must contain only ASCII letters, digits, underscores or hyphens".into(),
+        );
+    }
+    let upper = name.to_ascii_uppercase();
+    if [
+        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+        "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    ]
+    .contains(&upper.as_str())
+    {
+        return Err("project name is a reserved Windows device name".into());
+    }
+    Ok(())
+}
+
+fn create_project(root: &Path) -> Result<(), String> {
+    let name = root
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or("project path must end with a valid UTF-8 project name")?;
+    valid_project_name(name)?;
+    if root.exists() {
+        return Err(format!("{} already exists", root.display()));
+    }
+    fs::create_dir_all(root.join("code"))
+        .map_err(|e| format!("could not create {}: {e}", root.display()))?;
+    fs::create_dir(root.join("target"))
+        .map_err(|e| format!("could not create target directory: {e}"))?;
+    fs::write(
+        root.join("project.toml"),
+        format!("name = \"{name}\"\nversion = \"0.1.0\"\ndescription = \"\"\nauthors = []\n"),
+    )
+    .map_err(|e| format!("could not create project.toml: {e}"))?;
+    fs::write(root.join("requirement.toml"), "[packages]\n")
+        .map_err(|e| format!("could not create requirement.toml: {e}"))?;
+    fs::write(
+        root.join("code/main.ad"),
+        "fun main() {\n    print.newline(\"Hello, Adamantium!\");\n}\n",
+    )
+    .map_err(|e| format!("could not create code/main.ad: {e}"))?;
+    fs::write(root.join(".gitignore"), "/target/\n")
+        .map_err(|e| format!("could not create .gitignore: {e}"))?;
+    Ok(())
 }
 
 fn current_directory() -> Result<OsString, String> {
@@ -122,26 +187,7 @@ fn build(root: &Path) -> Result<PathBuf, String> {
         .get("name")
         .and_then(toml::Value::as_str)
         .ok_or("project.toml: name must be a string")?;
-    if name.is_empty()
-        || !name
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
-    {
-        return Err(
-            "project.toml: name must contain only ASCII letters, digits, underscores or hyphens"
-                .into(),
-        );
-    }
-    // Reject Windows device names even when an extension is appended.
-    let upper = name.to_ascii_uppercase();
-    if [
-        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
-        "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
-    ]
-    .contains(&upper.as_str())
-    {
-        return Err("project.toml: name is a reserved Windows device name".into());
-    }
+    valid_project_name(name).map_err(|error| format!("project.toml: {error}"))?;
     for field in ["version", "description"] {
         if project.get(field).and_then(toml::Value::as_str).is_none() {
             return Err(format!("project.toml: {field} must be a string"));
