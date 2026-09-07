@@ -262,9 +262,10 @@ var counter = CounterAlias(value=1,step=2);
 ### Arithmetic and assignment
 
 Initializers, assignments, print arguments, and function arguments accept numeric
-expressions. `*` and `/` take precedence over `+` and `-`; operators at the same
+expressions. `*`, `/`, and `%` take precedence over `+` and `-`; operators at the same
 precedence are evaluated left to right. Parentheses override precedence.
 Division truncates toward zero, so `-7/2` is `-3`.
+For integers, `/` returns the quotient without the remainder and `%` returns the remainder.
 
 ```text
 var a = 10;
@@ -299,6 +300,10 @@ if score >= 100 then {
 Adamantium supports `while`, `until`, exclusive integer `for` ranges, and
 infinite `loop` blocks. `until` executes its body while its condition is false.
 Both `break` and `continue` may be used inside any loop.
+
+Boolean expressions support `!` or `not`, `&&` or `and`, and `||` or `or`.
+`&&` and `||` use short-circuit evaluation, so the right side is evaluated only
+when it can affect the result.
 
 ```text
 var value = 0;
@@ -348,6 +353,36 @@ print.newline(a); // 150: clamp does not restrict future assignments.
 `clamp` changes the current value once, using inclusive lower and upper bounds.
 Bounds can be numeric expressions and are evaluated left to right. The bounds
 must be compatible with the variable's type; `clamp` rejects nonnumeric variables.
+
+### Optional values
+
+Prefix a function parameter name with `$` to make it optional. Prefix a class
+field name with `&` for the same behavior. An omitted value becomes `None`, while
+a supplied zero remains distinct from `None`.
+
+```text
+fun show($value:int) result:None {
+    print.newline(value);
+}
+
+class Options(pub &value:int) {
+    fun __new__() {}
+}
+
+show();       // Prints None.
+show(0);      // Prints 0.
+var options = Options();
+print.newline(options.value); // None
+```
+
+Required function parameters must come before optional ones. Optional strings,
+`f128` values, and nested class values are reserved for a later representation.
+
+### Panic and warnings
+
+`warn("message");` writes a warning and its source line to stderr, then continues.
+`panic("message");` writes the panic and source line to stderr, then immediately
+terminates the program with exit code `2`.
 
 ### Functions and named results
 

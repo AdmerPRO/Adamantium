@@ -1,5 +1,5 @@
 use crate::{
-    syntax::{Comparison, Operator},
+    syntax::{Comparison, LogicalOperator, Operator},
     typed::{Expression, Function, Instruction, Kind, Program},
     types::Type,
 };
@@ -181,6 +181,25 @@ impl Generator {
                 self.evaluate(op, expr.ty, value.ty, &[slot]);
                 self.next_slot = mark;
             }
+            Kind::Not(value) => {
+                self.expression(value);
+                self.emit("    test rax, rax\n    sete al\n    movzx eax, al\n    xor edx, edx");
+            }
+            Kind::Logical(operator, a, b) => {
+                let skip = self.label("logical_skip");
+                let end = self.label("logical_end");
+                self.expression(a);
+                self.emit("    test rax, rax");
+                match operator {
+                    LogicalOperator::And => self.emit(format!("    jz {skip}")),
+                    LogicalOperator::Or => self.emit(format!("    jnz {skip}")),
+                }
+                self.expression(b);
+                self.emit(format!(
+                    "    jmp {end}\n{skip}:\n    mov eax, {}\n    xor edx, edx\n{end}:",
+                    u8::from(matches!(operator, LogicalOperator::Or))
+                ));
+            }
             Kind::Binary(op, a, b) => {
                 let mark = self.next_slot;
                 self.expression(a);
@@ -192,6 +211,7 @@ impl Generator {
                     Operator::Subtract => 1,
                     Operator::Multiply => 2,
                     Operator::Divide => 3,
+                    Operator::Remainder => 13,
                 };
                 self.evaluate(op, expr.ty, expr.ty, &[left, right]);
                 self.next_slot = mark;
@@ -246,6 +266,19 @@ impl Generator {
                     self.expression(value);
                     let slot = self.save();
                     self.emit(format!("    lea rcx, {}\n    mov edx, {}\n    mov r8d, {}\n    call ad_print\n    test eax, eax\n    jnz ad_exit_error",memory(slot,0),value.ty.id(),u8::from(*newline)));
+                }
+                Instruction::Message(message, panic, line) => {
+                    self.expression(message);
+                    let message = self.save();
+                    self.emit(format!(
+                        "    lea rcx, {}\n    mov edx, {}\n    mov r8d, {}\n    call ad_message",
+                        memory(message, 0),
+                        line,
+                        u8::from(*panic)
+                    ));
+                    if *panic {
+                        self.emit("    mov ecx, 2\n    call ExitProcess");
+                    }
                 }
                 Instruction::Call(expr) => self.expression(expr),
                 Instruction::SetField(object, index, value) => {

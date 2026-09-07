@@ -34,6 +34,7 @@ pub fn warnings(program: &Program) -> Vec<String> {
                     visit(high, &mut reads, &mut calls);
                 }
                 Statement::Print(expr, _) => visit(expr, &mut reads, &mut calls),
+                Statement::Message(expr, _, _) => visit(expr, &mut reads, &mut calls),
                 Statement::Call(call) => visit_call(call, &mut reads, &mut calls),
                 Statement::SetField(object, _, value) => {
                     visit(object, &mut reads, &mut calls);
@@ -143,11 +144,11 @@ fn visit(expr: &Expr, reads: &mut HashSet<usize>, calls: &mut HashSet<String>) {
             reads.insert(*slot);
         }
         Expr::Call(call) => visit_call(call, reads, calls),
-        Expr::Binary(_, a, b) | Expr::Compare(_, a, b) => {
+        Expr::Binary(_, a, b) | Expr::Compare(_, a, b) | Expr::Logical(_, a, b) => {
             visit(a, reads, calls);
             visit(b, reads, calls);
         }
-        Expr::Negate(expr) | Expr::Positive(expr) | Expr::Annotated(expr, _) => {
+        Expr::Negate(expr) | Expr::Positive(expr) | Expr::Not(expr) | Expr::Annotated(expr, _) => {
             visit(expr, reads, calls)
         }
         Expr::Construct(_, fields) => {
@@ -186,7 +187,9 @@ fn visit_statement(
             visit(low, reads, calls);
             visit(high, reads, calls);
         }
-        Statement::Print(expr, _) | Statement::MethodCall(expr) => visit(expr, reads, calls),
+        Statement::Print(expr, _)
+        | Statement::MethodCall(expr)
+        | Statement::Message(expr, _, _) => visit(expr, reads, calls),
         Statement::Call(call) => visit_call(call, reads, calls),
         Statement::SetField(object, _, value) => {
             visit(object, reads, calls);

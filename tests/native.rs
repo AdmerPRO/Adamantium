@@ -11,6 +11,65 @@ static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_logic_remainder_warnings_and_optional_values() {
+    let output = Project::new(
+        r#"
+        class Options(pub &value:int) { fun __new__() {} }
+        fun main() {
+            print.newline(!false);
+            print.newline(not true);
+            print.newline(true && true);
+            print.newline(false and explode());
+            print.newline(true || explode());
+            print.newline(false or true);
+            print.newline(17 / 5);
+            print.newline(17 % 5);
+            show();
+            show(0);
+            show(None);
+            var empty=Options();
+            var full=Options(value=7);
+            print.newline(empty.value);
+            print.newline(full.value);
+            warn("careful");
+        }
+        fun explode() result:bool { var zero=0; var bad=1/zero; result=bad==0; }
+        fun show($value:int) result:None { print.newline(value); }
+    "#,
+    )
+    .run();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"true\r\nfalse\r\ntrue\r\nfalse\r\ntrue\r\ntrue\r\n3\r\n2\r\nNone\r\n0\r\nNone\r\nNone\r\n7\r\n");
+    let warning = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        warning.contains("Adamantium program warned at line"),
+        "{warning}"
+    );
+    assert!(warning.contains(": careful"), "{warning}");
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_panic_reports_source_line_and_stops() {
+    let output = Project::new(
+        "fun main() {\n    print.newline(1);\n    panic(\"broken\");\n    print.newline(2);\n}",
+    )
+    .run();
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(output.stdout, b"1\r\n");
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("Adamantium program panicked at line 3: broken")
+    );
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_value_and_function_aliases() {
     let output = Project::new(
         r#"

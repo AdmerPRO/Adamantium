@@ -23,6 +23,9 @@ impl Position {
     pub fn error(self, message: impl std::fmt::Display) -> String {
         format!("{}:{}: {message}", self.line, self.column)
     }
+    pub fn line(self) -> usize {
+        self.line
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -31,6 +34,12 @@ pub enum Operator {
     Subtract,
     Multiply,
     Divide,
+    Remainder,
+}
+#[derive(Clone, Copy, Debug)]
+pub enum LogicalOperator {
+    And,
+    Or,
 }
 #[derive(Clone, Copy, Debug)]
 pub enum Comparison {
@@ -48,6 +57,7 @@ impl Operator {
             '-' => Some(Self::Subtract),
             '*' => Some(Self::Multiply),
             '/' => Some(Self::Divide),
+            '%' => Some(Self::Remainder),
             _ => None,
         }
     }
@@ -68,7 +78,9 @@ pub enum Expr {
     MethodCall(Box<Expr>, String, Vec<Expr>, Position),
     Negate(Box<Expr>),
     Positive(Box<Expr>),
+    Not(Box<Expr>),
     Binary(Operator, Box<Expr>, Box<Expr>),
+    Logical(LogicalOperator, Box<Expr>, Box<Expr>),
     Compare(Comparison, Box<Expr>, Box<Expr>),
     Call(Call),
 }
@@ -88,6 +100,7 @@ pub enum Statement {
     Call(Call),
     SetField(Expr, String, Expr),
     MethodCall(Expr),
+    Message(Expr, bool, Position),
     If(Expr, Vec<Statement>, Vec<Statement>),
     While(Expr, Vec<Statement>),
     Until(Expr, Vec<Statement>),
@@ -102,6 +115,7 @@ pub enum Statement {
 pub struct Function {
     pub name: String,
     pub parameters: usize,
+    pub optional_parameters: Vec<bool>,
     pub result: Option<usize>,
     pub statements: Vec<Statement>,
     pub positions: Vec<Position>,
@@ -277,7 +291,7 @@ fn lex(source: &str) -> Result<Vec<(Token, Position)>, String> {
                 }
             }
             Token::String(value)
-        } else if "(){}.;=,:+-*/[]!<>".contains(c) {
+        } else if "(){}.;=,:+-*/%[]!<>|&$".contains(c) {
             Token::Symbol(c)
         } else {
             return Err(position.error(format!("unexpected character {c:?}")));
@@ -360,6 +374,11 @@ impl Parser {
                     "break",
                     "continue",
                     "match",
+                    "not",
+                    "or",
+                    "and",
+                    "panic",
+                    "warn",
                 ]
                 .contains(&name.as_str())
                     && Type::parse(&name).is_none() =>
@@ -524,10 +543,12 @@ impl Parser {
                     self.next();
                     Expr::Integer(number)
                 } else {
-                    Expr::Negate(Box::new(self.expression(3)?))
+                    Expr::Negate(Box::new(self.expression(5)?))
                 }
             }
-            Token::Symbol('+') => Expr::Positive(Box::new(self.expression(3)?)),
+            Token::Symbol('+') => Expr::Positive(Box::new(self.expression(5)?)),
+            Token::Symbol('!') => Expr::Not(Box::new(self.expression(5)?)),
+            Token::Word(value) if value == "not" => Expr::Not(Box::new(self.expression(5)?)),
             Token::Symbol('(') => {
                 let inner = self.expression(0)?;
                 self.symbol(')')?;
@@ -615,24 +636,9 @@ impl Parser {
                 left = Expr::Field(Box::new(left), member, position);
             }
         }
-        while let Token::Symbol(c) = self.peek() {
-            let Some(operator) = Operator::from_char(*c) else {
-                break;
-            };
-            let precedence = if matches!(operator, Operator::Multiply | Operator::Divide) {
-                2
-            } else {
-                1
-            };
-            if precedence < min_precedence {
-                break;
-            }
-            self.next();
-            let right = self.expression(precedence + 1)?;
-            left = Expr::Binary(operator, Box::new(left), Box::new(right));
-        }
-        if min_precedence == 0 {
-            let comparison = match (self.peek(), self.tokens.get(self.cursor + 1).map(|x| &x.0)) {
+        loop {
+            let next = self.tokens.get(self.cursor + 1).map(|x| &x.0);
+            let comparison = match (self.peek(), next) {
                 (Token::Symbol('='), Some(Token::Symbol('='))) => Some((Comparison::Equal, true)),
                 (Token::Symbol('!'), Some(Token::Symbol('='))) => {
                     Some((Comparison::NotEqual, true))
@@ -647,19 +653,59 @@ impl Parser {
                 (Token::Symbol('>'), _) => Some((Comparison::Greater, false)),
                 _ => None,
             };
-            if let Some((comparison, two_symbols)) = comparison {
-                self.next();
-                if two_symbols {
-                    self.next();
+            let arithmetic = match self.peek() {
+                Token::Symbol(c) => Operator::from_char(*c),
+                _ => None,
+            };
+            let logical = match (self.peek(), next) {
+                (Token::Word(word), _) if word == "and" => Some((LogicalOperator::And, false)),
+                (Token::Word(word), _) if word == "or" => Some((LogicalOperator::Or, false)),
+                (Token::Symbol('&'), Some(Token::Symbol('&'))) => {
+                    Some((LogicalOperator::And, true))
                 }
-                let right = self.expression(1)?;
-                left = Expr::Compare(comparison, Box::new(left), Box::new(right));
-                if matches!(self.peek(), Token::Symbol('=' | '!' | '<' | '>')) {
-                    return Err(self
-                        .position()
-                        .error("chained comparisons are not supported"));
-                }
+                (Token::Symbol('|'), Some(Token::Symbol('|'))) => Some((LogicalOperator::Or, true)),
+                _ => None,
+            };
+            let (precedence, consume, kind) = if let Some((op, two)) = logical {
+                (
+                    if matches!(op, LogicalOperator::And) {
+                        1
+                    } else {
+                        0
+                    },
+                    if two { 2 } else { 1 },
+                    2,
+                )
+            } else if let Some((_, two)) = comparison {
+                (2, if two { 2 } else { 1 }, 1)
+            } else if let Some(op) = arithmetic {
+                (
+                    if matches!(
+                        op,
+                        Operator::Multiply | Operator::Divide | Operator::Remainder
+                    ) {
+                        4
+                    } else {
+                        3
+                    },
+                    1,
+                    0,
+                )
+            } else {
+                break;
+            };
+            if precedence < min_precedence {
+                break;
             }
+            for _ in 0..consume {
+                self.next();
+            }
+            let right = self.expression(precedence + 1)?;
+            left = match kind {
+                0 => Expr::Binary(arithmetic.unwrap(), Box::new(left), Box::new(right)),
+                1 => Expr::Compare(comparison.unwrap().0, Box::new(left), Box::new(right)),
+                _ => Expr::Logical(logical.unwrap().0, Box::new(left), Box::new(right)),
+            };
         }
         if min_precedence == 0 && self.take(Token::Symbol(':')) {
             left = Expr::Annotated(Box::new(left), self.type_name()?);
@@ -786,6 +832,12 @@ impl Parser {
                 let output = Statement::Print(self.expression(0)?, newline);
                 self.symbol(')')?;
                 output
+            }
+            Token::Word(word) if word == "panic" || word == "warn" => {
+                self.symbol('(')?;
+                let message = self.expression(0)?;
+                self.symbol(')')?;
+                Statement::Message(message, word == "panic", position)
             }
             Token::Word(word) if word == "return" => {
                 let Some(result_name) = self.result_name.clone() else {
@@ -1007,6 +1059,7 @@ impl Parser {
         self.result_name = None;
         self.loop_depth = 0;
         self.symbol_aliases.clear();
+        let mut optional_parameters = Vec::new();
         let function_position = self.position();
         if let Some((_, id)) = &owner {
             self.bind(
@@ -1016,17 +1069,34 @@ impl Parser {
                 Some(Type::Class(*id)),
                 function_position,
             )?;
+            optional_parameters.push(false);
         }
         self.word("fun")?;
         let source_name = self.name()?;
         self.symbol('(')?;
         if !self.take(Token::Symbol(')')) {
+            let mut found_optional = false;
             loop {
                 let position = self.position();
+                let optional = self.take(Token::Symbol('$'));
+                if found_optional && !optional {
+                    return Err(
+                        position.error("required parameters cannot follow optional parameters")
+                    );
+                }
+                found_optional |= optional;
                 let parameter = self.name()?;
                 self.symbol(':')?;
-                let ty = self.type_name()?;
+                let mut ty = self.type_name()?;
+                if optional {
+                    if matches!(ty, Type::String | Type::F128 | Type::Class(_)) {
+                        return Err(position
+                            .error(format!("optional {ty} parameters are not supported yet")));
+                    }
+                    ty = Type::Optional(ty.id());
+                }
                 self.bind(parameter, true, true, Some(ty), position)?;
+                optional_parameters.push(optional);
                 if self.take(Token::Symbol(')')) {
                     break;
                 }
@@ -1086,6 +1156,7 @@ impl Parser {
         Ok(Function {
             name,
             parameters,
+            optional_parameters,
             result,
             statements,
             positions,
@@ -1162,13 +1233,21 @@ impl Parser {
             loop {
                 let public = self.take(Token::Word("pub".into()));
                 let field_position = self.position();
+                let optional = self.take(Token::Symbol('&'));
                 let field = self.name()?;
                 self.symbol(':')?;
-                let ty = self.type_name()?;
+                let mut ty = self.type_name()?;
                 if matches!(ty, Type::Class(_)) {
                     return Err(field_position.error(
                         "class-typed fields are not supported yet because class copies must be independent",
                     ));
+                }
+                if optional {
+                    if matches!(ty, Type::String | Type::F128 | Type::Class(_)) {
+                        return Err(field_position
+                            .error(format!("optional {ty} fields are not supported yet")));
+                    }
+                    ty = Type::Optional(ty.id());
                 }
                 if fields.iter().any(|value: &ClassField| value.name == field) {
                     return Err(
@@ -1282,7 +1361,14 @@ pub fn parse(source: &str) -> Result<Program, String> {
             let methods = parser.class_declaration()?;
             for method in methods {
                 if signatures
-                    .insert(method.name.clone(), method.parameters)
+                    .insert(
+                        method.name.clone(),
+                        (
+                            method.parameters
+                                - method.optional_parameters.iter().filter(|x| **x).count(),
+                            method.parameters,
+                        ),
+                    )
                     .is_some()
                 {
                     return Err(position.error(format!(
@@ -1308,7 +1394,14 @@ pub fn parse(source: &str) -> Result<Program, String> {
             )));
         }
         if signatures
-            .insert(function.name.clone(), function.parameters)
+            .insert(
+                function.name.clone(),
+                (
+                    function.parameters
+                        - function.optional_parameters.iter().filter(|x| **x).count(),
+                    function.parameters,
+                ),
+            )
             .is_some()
         {
             return Err(position.error(format!("function '{}' is already declared", function.name)));
@@ -1320,7 +1413,7 @@ pub fn parse(source: &str) -> Result<Program, String> {
     }
     fn validate_statement(
         statement: &Statement,
-        signatures: &HashMap<String, usize>,
+        signatures: &HashMap<String, (usize, usize)>,
     ) -> Result<(), String> {
         match statement {
             Statement::Assign(_, expr) | Statement::Print(expr, _) => {
@@ -1342,6 +1435,7 @@ pub fn parse(source: &str) -> Result<Program, String> {
                 validate_expr(value, signatures)?;
             }
             Statement::MethodCall(expr) => validate_expr(expr, signatures)?,
+            Statement::Message(expr, _, _) => validate_expr(expr, signatures)?,
             Statement::If(condition, yes, no) => {
                 validate_expr(condition, signatures)?;
                 for statement in yes.iter().chain(no) {
@@ -1393,14 +1487,16 @@ pub fn parse(source: &str) -> Result<Program, String> {
     classes.sort_by_key(|class| class.id);
     Ok(Program { functions, classes })
 }
-fn validate_expr(expr: &Expr, signatures: &HashMap<String, usize>) -> Result<(), String> {
+fn validate_expr(expr: &Expr, signatures: &HashMap<String, (usize, usize)>) -> Result<(), String> {
     match expr {
         Expr::Call(call) => validate_call(call, signatures),
-        Expr::Binary(_, left, right) | Expr::Compare(_, left, right) => {
+        Expr::Binary(_, left, right)
+        | Expr::Compare(_, left, right)
+        | Expr::Logical(_, left, right) => {
             validate_expr(left, signatures)?;
             validate_expr(right, signatures)
         }
-        Expr::Negate(expr) | Expr::Positive(expr) | Expr::Annotated(expr, _) => {
+        Expr::Negate(expr) | Expr::Positive(expr) | Expr::Not(expr) | Expr::Annotated(expr, _) => {
             validate_expr(expr, signatures)
         }
         Expr::Construct(_, fields) => {
@@ -1420,17 +1516,22 @@ fn validate_expr(expr: &Expr, signatures: &HashMap<String, usize>) -> Result<(),
         _ => Ok(()),
     }
 }
-fn validate_call(call: &Call, signatures: &HashMap<String, usize>) -> Result<(), String> {
-    let arity = signatures.get(&call.name).ok_or_else(|| {
+fn validate_call(call: &Call, signatures: &HashMap<String, (usize, usize)>) -> Result<(), String> {
+    let (required, total) = signatures.get(&call.name).ok_or_else(|| {
         call.position
             .error(format!("function '{}' is not declared", call.name))
     })?;
     if call.name == "main" {
         return Err(call.position.error("main cannot be called as a function"));
     }
-    if *arity != call.arguments.len() {
+    if call.arguments.len() < *required || call.arguments.len() > *total {
+        let expected = if required == total {
+            required.to_string()
+        } else {
+            format!("{required}..={total}")
+        };
         return Err(call.position.error(format!(
-            "function '{}' expects {arity} arguments, found {}",
+            "function '{}' expects {expected} arguments, found {}",
             call.name,
             call.arguments.len()
         )));

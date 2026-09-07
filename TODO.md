@@ -101,7 +101,7 @@ Executable
 * [x] Implement identifiers
 * [x] Implement literals — integers, floats, strings, booleans, and `None`
 * [x] Implement function calls
-* [x] Implement operators — numeric `+`, `-`, `*`, `/`, comparisons and compound assignments
+* [x] Implement operators — numeric `+`, `-`, `*`, `/`, `%`, comparisons, boolean operators and compound assignments
 * [x] Implement operator precedence
 * [x] Implement parentheses
 * [x] Implement `{ }` blocks — function and control-flow bodies
@@ -284,10 +284,11 @@ var a = b + c;
 
 # 11. Optional Values
 
-Implement `$` optional types:
+Implement optional function parameters and class fields:
 
 ```adamantium
-date_to_unban: $bool
+fun example($value:int) result:None {}
+class Example(&value:int) { ... }
 ```
 
 Possible value:
@@ -302,12 +303,14 @@ or:
 true
 ```
 
-* [ ] Implement `$Type`
-* [ ] Allow omitted optional class fields
-* [ ] Allow optional function parameters
-* [ ] Represent missing values as `None`
-* [ ] Add optional-value type checking
-* [ ] Prevent unsafe access to optional values
+* [x] Implement `$name:Type` optional function parameters for supported compact values
+* [x] Implement `&name:Type` optional class fields for supported compact values
+* [x] Allow omitted optional class fields
+* [x] Allow optional function parameters
+* [x] Represent missing values as `None`
+* [x] Add optional-value type checking
+* [x] Prevent arithmetic and other unsafe access to optional values
+* [ ] Support optional strings, f128 values and nested class values
 
 ---
 
@@ -610,10 +613,10 @@ var err = try {
 panic("Something went wrong!");
 ```
 
-* [ ] Implement `panic`
-* [ ] Print panic message
-* [ ] Print source line
-* [ ] Terminate program
+* [x] Implement `panic`
+* [x] Print panic message
+* [x] Print source line
+* [x] Terminate program with exit code 2
 
 ## `warn`
 
@@ -621,9 +624,9 @@ panic("Something went wrong!");
 warn("HP is low!");
 ```
 
-* [ ] Implement runtime warnings
-* [ ] Print source line
-* [ ] Continue program execution
+* [x] Implement runtime warnings
+* [x] Print source line
+* [x] Continue program execution
 
 ---
 
@@ -1096,8 +1099,8 @@ Adamantium must remain memory-safe.
 * [x] Implement runtime startup
 * [x] Implement runtime shutdown
 * [x] Implement printing — strings, integers, floats, booleans, and `None`
-* [ ] Implement panic handling
-* [ ] Implement warning handling
+* [x] Implement panic handling
+* [x] Implement warning handling
 * [x] Implement exit codes — normal completion, output failures, arithmetic/range failures
 * [ ] Implement memory management
 * [x] Implement string runtime — immutable literal storage and value copies; string operations are pending

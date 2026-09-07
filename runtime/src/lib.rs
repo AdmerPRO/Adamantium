@@ -93,3 +93,17 @@ pub unsafe extern "C" fn ad_print(value: *const Value, ty: u32, newline: u32) ->
         0
     }
 }
+
+/// # Safety
+/// `message` must point to a string `Value` whose pointer and length are valid.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ad_message(message: *const Value, line: usize, panic: u32) {
+    let Some(message) = (unsafe { message.as_ref() }) else { return; };
+    let bytes = unsafe { std::slice::from_raw_parts(message.lo as *const u8, message.hi as usize) };
+    let text = String::from_utf8_lossy(bytes);
+    if panic != 0 {
+        eprintln!("Adamantium program panicked at line {line}: {text}");
+    } else {
+        eprintln!("Adamantium program warned at line {line}: {text}");
+    }
+}

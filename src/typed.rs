@@ -3,7 +3,7 @@ use std::collections::HashMap;
 #[path = "typed_tests.rs"]
 mod tests;
 use crate::{
-    syntax::{self, ClassDefinition, Comparison, Expr, Operator, Statement},
+    syntax::{self, ClassDefinition, Comparison, Expr, LogicalOperator, Operator, Statement},
     types::{self, Type, Value},
 };
 
@@ -16,8 +16,10 @@ pub enum Kind {
     String(Vec<u8>),
     Variable(usize),
     Negate(Box<Expression>),
+    Not(Box<Expression>),
     Binary(Operator, Box<Expression>, Box<Expression>),
     Compare(Comparison, Box<Expression>, Box<Expression>),
+    Logical(LogicalOperator, Box<Expression>, Box<Expression>),
     Convert(Box<Expression>),
     Call(String, Vec<Expression>),
     Construct(u32, Vec<Expression>, String),
@@ -32,6 +34,7 @@ pub enum Instruction {
     Print(Expression, bool),
     Call(Expression),
     SetField(Expression, usize, Expression),
+    Message(Expression, bool, usize),
     If(Expression, Vec<Instruction>, Vec<Instruction>),
     While(Expression, Vec<Instruction>),
     Until(Expression, Vec<Instruction>),
@@ -161,6 +164,27 @@ fn promoted(a: Type, b: Type) -> Result<Type, String> {
 }
 
 impl Checker<'_> {
+    fn arguments(
+        &self,
+        arguments: &[Expr],
+        parameters: &[Type],
+    ) -> Result<Vec<Expression>, String> {
+        let mut result = arguments
+            .iter()
+            .zip(parameters)
+            .map(|(argument, ty)| self.expression(argument, Some(*ty)))
+            .collect::<Result<Vec<_>, _>>()?;
+        for ty in &parameters[arguments.len()..] {
+            if !matches!(ty, Type::Optional(_)) {
+                return Err("missing required function argument".into());
+            }
+            result.push(Expression {
+                ty: *ty,
+                kind: Kind::Constant(Value::default()),
+            });
+        }
+        Ok(result)
+    }
     fn hint(&self, expr: &Expr) -> Option<Type> {
         match expr {
             Expr::Variable(slot) => self.types[*slot],
@@ -174,6 +198,7 @@ impl Checker<'_> {
             Expr::Construct(id, _) => Some(Type::Class(*id)),
             Expr::Field(_, _, _) | Expr::MethodCall(_, _, _, _) => None,
             Expr::Negate(e) | Expr::Positive(e) => self.hint(e),
+            Expr::Not(_) | Expr::Logical(_, _, _) => Some(Type::Bool),
             Expr::Binary(_, a, b) => match (self.hint(a), self.hint(b)) {
                 (Some(a), Some(b)) => promoted(a, b).ok(),
                 (a, b) => a.or(b),
@@ -185,6 +210,18 @@ impl Checker<'_> {
     fn convert(&self, expr: Expression, to: Type) -> Result<Expression, String> {
         if expr.ty == to {
             return Ok(expr);
+        }
+        if matches!(to, Type::Optional(_)) {
+            if let Kind::Constant(value) = expr.kind {
+                return Ok(Expression {
+                    ty: to,
+                    kind: Kind::Constant(types::convert(value, expr.ty, to)?),
+                });
+            }
+            return Ok(Expression {
+                ty: to,
+                kind: Kind::Convert(Box::new(expr)),
+            });
         }
         if !expr.ty.numeric() || !to.numeric() || (expr.ty.floating() && to.integer()) {
             return Err(format!("cannot assign or convert {} to {to}", expr.ty));
@@ -246,20 +283,28 @@ impl Checker<'_> {
                         .iter()
                         .filter(|(name, _)| name == &field.name)
                         .collect::<Vec<_>>();
-                    if matching.len() != 1 {
+                    if matching.len() > 1
+                        || (matching.is_empty() && !matches!(field.ty, Type::Optional(_)))
+                    {
                         return Err(format!(
-                            "class '{}' requires field '{}' exactly once",
+                            "class '{}' requires field '{}' exactly once unless it is optional",
                             class.name, field.name
                         ));
                     }
-                    fields.push(self.expression(&matching[0].1, Some(field.ty))?);
+                    fields.push(if matching.is_empty() {
+                        Expression {
+                            ty: field.ty,
+                            kind: Kind::Constant(Value::default()),
+                        }
+                    } else {
+                        self.expression(&matching[0].1, Some(field.ty))?
+                    });
                 }
-                if provided.len() != class.fields.len() {
-                    let unknown = provided
-                        .iter()
-                        .find(|(name, _)| !class.fields.iter().any(|field| field.name == *name))
-                        .map(|(name, _)| name.as_str())
-                        .unwrap_or("duplicate field");
+                if let Some(unknown) = provided
+                    .iter()
+                    .find(|(name, _)| !class.fields.iter().any(|field| field.name == *name))
+                    .map(|(name, _)| name.as_str())
+                {
                     return Err(format!(
                         "invalid field '{unknown}' for class '{}'",
                         class.name
@@ -277,12 +322,7 @@ impl Checker<'_> {
             Expr::Annotated(value, ty) => self.expression(value, Some(*ty))?,
             Expr::Call(call) => {
                 let signature = self.signatures.get(&call.name).ok_or("unknown function")?;
-                let arguments = call
-                    .arguments
-                    .iter()
-                    .zip(&signature.parameters)
-                    .map(|(a, t)| self.expression(a, Some(*t)))
-                    .collect::<Result<_, _>>()?;
+                let arguments = self.arguments(&call.arguments, &signature.parameters)?;
                 Expression {
                     ty: signature.result,
                     kind: Kind::Call(call.name.clone(), arguments),
@@ -340,18 +380,19 @@ impl Checker<'_> {
                         .error(format!("invalid access: method '{method_name}' is private")));
                 }
                 let signature = &self.signatures[&method.function];
-                if arguments.len() + 1 != signature.parameters.len() {
+                let method_parameters = &signature.parameters[1..];
+                let required = method_parameters
+                    .iter()
+                    .filter(|ty| !matches!(ty, Type::Optional(_)))
+                    .count();
+                if arguments.len() < required || arguments.len() > method_parameters.len() {
                     return Err(position.error(format!(
-                        "method '{method_name}' expects {} arguments, found {}",
-                        signature.parameters.len() - 1,
+                        "method '{method_name}' expects {required}..={} arguments, found {}",
+                        method_parameters.len(),
                         arguments.len()
                     )));
                 }
-                let arguments = arguments
-                    .iter()
-                    .zip(&signature.parameters[1..])
-                    .map(|(argument, ty)| self.expression(argument, Some(*ty)))
-                    .collect::<Result<_, _>>()?;
+                let arguments = self.arguments(arguments, method_parameters)?;
                 Expression {
                     ty: signature.result,
                     kind: Kind::MethodCall(method.function.clone(), Box::new(object), arguments),
@@ -374,6 +415,10 @@ impl Checker<'_> {
                 }
                 value
             }
+            Expr::Not(value) => Expression {
+                ty: Type::Bool,
+                kind: Kind::Not(Box::new(self.expression(value, Some(Type::Bool))?)),
+            },
             Expr::Binary(op, a, b) => {
                 let hint = match (self.hint(a), self.hint(b)) {
                     (Some(a), Some(b)) => Some(promoted(a, b)?),
@@ -383,6 +428,9 @@ impl Checker<'_> {
                 let a = self.expression(a, literal_type)?;
                 let b = self.expression(b, literal_type)?;
                 let ty = promoted(a.ty, b.ty)?;
+                if matches!(op, Operator::Remainder) && !ty.integer() {
+                    return Err("remainder requires integer operands".into());
+                }
                 Expression {
                     ty,
                     kind: Kind::Binary(
@@ -420,6 +468,14 @@ impl Checker<'_> {
                     kind: Kind::Compare(*comparison, Box::new(a), Box::new(b)),
                 }
             }
+            Expr::Logical(operator, a, b) => Expression {
+                ty: Type::Bool,
+                kind: Kind::Logical(
+                    *operator,
+                    Box::new(self.expression(a, Some(Type::Bool))?),
+                    Box::new(self.expression(b, Some(Type::Bool))?),
+                ),
+            },
         };
         if let Some(ty) = expected {
             self.convert(result, ty)
@@ -457,15 +513,15 @@ impl Checker<'_> {
             Statement::Print(expr, newline) => {
                 Instruction::Print(self.expression(expr, None)?, *newline)
             }
+            Statement::Message(expr, panic, position) => Instruction::Message(
+                self.expression(expr, Some(Type::String))?,
+                *panic,
+                position.line(),
+            ),
             Statement::Return => Instruction::Return,
             Statement::Call(call) => {
                 let signature = &self.signatures[&call.name];
-                let arguments = call
-                    .arguments
-                    .iter()
-                    .zip(&signature.parameters)
-                    .map(|(a, t)| self.expression(a, Some(*t)))
-                    .collect::<Result<_, _>>()?;
+                let arguments = self.arguments(&call.arguments, &signature.parameters)?;
                 Instruction::Call(Expression {
                     ty: signature.result,
                     kind: Kind::Call(call.name.clone(), arguments),

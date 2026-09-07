@@ -261,3 +261,34 @@ fn aliases_share_types_and_disconnect_scalar_values() {
         .contains("cannot be disconnected")
     );
 }
+
+#[test]
+fn logical_remainder_and_optional_values_are_typed() {
+    assert!(
+        checked(
+            r#"
+        class Options(pub &value:int) { fun __new__() {} }
+        fun main() {
+            var logic = not false and true || false;
+            var remainder = 17 % 5;
+            show(); show(0); show(None);
+            var empty = Options();
+            var full = Options(value=7);
+            print.newline(empty.value);
+            print.newline(full.value);
+            warn("careful");
+        }
+        fun show($value:int) r:None { print.newline(value); }
+    "#
+        )
+        .is_ok()
+    );
+    for source in [
+        "fun main() { var bad = 1 || true; }",
+        "fun main() { var bad = 1.5 % 1.0; }",
+        "fun main() { required(); } fun required($a:int,b:int) r:None {}",
+        "fun main() { panic(123); }",
+    ] {
+        assert!(checked(source).is_err(), "accepted {source}");
+    }
+}

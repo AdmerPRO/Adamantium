@@ -11,7 +11,8 @@ enum Status {
 
 class Counter(
     pub value:int,
-    pub step:int
+    pub step:int,
+    pub &limit:int
 ) {
     fun __new__() {
         print.newline("Counter created.");
@@ -107,6 +108,13 @@ fun main() {
     print.newline(arithmetic);
     print.newline(explicit_changeable);
 
+    // Boolean operators short-circuit; / gives the quotient and % the remainder.
+    var logical = !false && (true or false);
+    print.newline(logical);
+    print.newline(17/5);
+    print.newline(17%5);
+    warn("This is an example warning.");
+
     // Value aliases share changes until they are disconnected.
     var shared_value = 10;
     var shared_alias = shared_value.as_variable;
@@ -180,6 +188,7 @@ fun main() {
     var second_counter = first_counter;
     second_counter.value = 20;
     print.newline(first_counter.value);
+    print.newline(first_counter.limit);
     print.newline(second_counter.value);
 
     // Calls can be nested inside expressions and arguments are passed by value.
@@ -191,6 +200,8 @@ fun main() {
 
     // A None-returning function can also be used as a standalone statement.
     notify();
+    show_optional();
+    show_optional(7);
 }
 
 fun add(a:int,b:int) result:int {
@@ -228,4 +239,8 @@ fun nothing() result:None {
 
 fun notify() result:None {
     print.newline("All current features completed.");
+}
+
+fun show_optional($value:int) result:None {
+    print.newline(value);
 }

@@ -22,6 +22,7 @@ pub enum Type {
     None,
     Enum(u32),
     Class(u32),
+    Optional(u32),
 }
 
 impl Type {
@@ -46,6 +47,9 @@ impl Type {
         })
     }
     pub fn from_id(id: u32) -> Option<Self> {
+        if id & 0x2000_0000 != 0 {
+            return Some(Self::Optional(id & !0x2000_0000));
+        }
         if id & 0x8000_0000 != 0 {
             return Some(Self::Enum(id & 0x7fff_ffff));
         }
@@ -91,6 +95,7 @@ impl Type {
             Self::None => 14,
             Self::Enum(id) => 0x8000_0000 | id,
             Self::Class(id) => 0x4000_0000 | id,
+            Self::Optional(id) => 0x2000_0000 | id,
         }
     }
     pub fn integer(self) -> bool {
@@ -154,6 +159,7 @@ impl std::fmt::Display for Type {
             Self::None => "None",
             Self::Enum(_) => "enum",
             Self::Class(_) => "class",
+            Self::Optional(_) => "optional",
         })
     }
 }
@@ -275,6 +281,14 @@ fn floating<F: Float>(op: u32, a: Value, b: Value, c: Value) -> Result<Value, St
     Ok(Value::from_bits(result.value.to_bits()))
 }
 pub fn operation(op: u32, ty: Type, a: Value, b: Value, c: Value) -> Result<Value, String> {
+    if let Type::Optional(_) = ty
+        && matches!(op, 7 | 8)
+    {
+        return Ok(Value {
+            lo: (if op == 7 { a == b } else { a != b }) as u64,
+            hi: 0,
+        });
+    }
     if ty.integer() {
         let (a, b, c) = (a.integer(ty), b.integer(ty), c.integer(ty));
         if (7..=12).contains(&op) {
@@ -297,6 +311,7 @@ pub fn operation(op: u32, ty: Type, a: Value, b: Value, c: Value) -> Result<Valu
             1 => a.checked_sub(b),
             2 => a.checked_mul(b),
             3 => a.checked_div(b),
+            13 => a.checked_rem(b),
             4 => a.checked_neg(),
             6 if b <= c => Some(a.clamp(b, c)),
             _ => None,
@@ -320,6 +335,20 @@ pub fn operation(op: u32, ty: Type, a: Value, b: Value, c: Value) -> Result<Valu
 pub fn convert(value: Value, from: Type, to: Type) -> Result<Value, String> {
     if from == to {
         return Ok(value);
+    }
+    if let Type::Optional(inner) = to {
+        if from == Type::None {
+            return Ok(Value::default());
+        }
+        if from.id() == inner {
+            if matches!(from, Type::String | Type::F128 | Type::Class(_)) {
+                return Err(format!("optional {from} values are not supported yet"));
+            }
+            return Ok(Value {
+                lo: value.lo,
+                hi: 1,
+            });
+        }
     }
     if from.integer() && to.integer() {
         return integer(value.integer(from), to);
@@ -362,6 +391,20 @@ pub fn display(value: Value, ty: Type) -> Result<String, String> {
         Type::None => "None".into(),
         Type::Enum(_) => value.lo.to_string(),
         Type::Class(_) => return Err("class objects cannot be printed directly".into()),
+        Type::Optional(inner) => {
+            if value.hi == 0 {
+                "None".into()
+            } else {
+                let inner = Type::from_id(inner).ok_or("invalid optional type")?;
+                return display(
+                    Value {
+                        lo: value.lo,
+                        hi: 0,
+                    },
+                    inner,
+                );
+            }
+        }
         _ => return Err("string values must be written as UTF-8 bytes".into()),
     })
 }
