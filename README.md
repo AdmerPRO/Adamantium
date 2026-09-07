@@ -130,7 +130,7 @@ Their contents are immutable literals; concatenation and indexing are not yet
 supported. `bool` prints `true` or `false`; `None` prints `None`. Optional types
 are not implemented: a variable of type `None` can only hold `None`.
 
-`offset`, `List`, `class`, and function-value types remain unsupported.
+`offset`, `List`, and function-value types remain unsupported.
 
 Enums are declared at file level before their first use. Variants are separated
 with commas, and a trailing comma is optional:
@@ -150,6 +150,46 @@ fun main() {
 
 Each enum is a distinct type. Enum values can be assigned, passed to functions,
 returned, and printed. Arithmetic and `clamp` are not supported for enums.
+
+### Classes
+
+Classes declare typed fields in parentheses and methods in their body. Every
+class must define a parameterless `__new__` method. Object creation initializes
+every field from a named argument and then calls `__new__` automatically:
+
+```text
+class MyClass(
+    pub value:int,
+    pub other:int
+) {
+    fun __new__() {
+        print.newline("New object");
+    }
+
+    pub fun set_value(new_value:int) result:int {
+        self.value = new_value;
+        result = self.value;
+    }
+}
+
+fun main() {
+    var first = MyClass(value=1,other=2);
+    first.set_value(10);
+    print.newline(first.value);
+
+    var second = first;
+    second.value = 20;
+    print.newline(first.value);  // 10
+    print.newline(second.value); // 20
+}
+```
+
+Fields and methods are private unless marked `pub`; private members are available
+through `self` inside the same class. Class values use copy semantics, including
+assignments and ordinary function arguments. Methods modify their receiver.
+All fields are currently required, direct printing of an object is unsupported,
+and class-typed fields are reserved until independent deep copies are implemented.
+Lifecycle hooks other than `__new__` and `as_var()` references are not supported.
 
 ### Comments
 

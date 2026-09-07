@@ -9,6 +9,7 @@ struct Generator {
     data: Vec<Vec<u8>>,
     next_slot: usize,
     max_slot: usize,
+    class_sizes: Vec<usize>,
 }
 fn memory(slot: usize, offset: usize) -> String {
     format!("[rbp - {}]", (slot + 1) * 16 - offset)
@@ -42,11 +43,20 @@ impl Generator {
         self.store(slot);
         slot
     }
+    fn clone_class(&mut self, ty: Type) {
+        if let Type::Class(id) = ty {
+            self.emit(format!(
+                "    mov rcx, rax\n    mov edx, {}\n    call ad_object_clone\n    xor edx, edx",
+                self.class_sizes[id as usize]
+            ));
+        }
+    }
     fn call(&mut self, name: &str, arguments: &[Expression]) {
         let mark = self.next_slot;
         let mut slots = Vec::new();
         for argument in arguments {
             self.expression(argument);
+            self.clone_class(argument.ty);
             slots.push(self.save());
         }
         let size = slots.len() * 16;
@@ -102,6 +112,56 @@ impl Generator {
             }
             Kind::Variable(slot) => self.load(*slot),
             Kind::Call(name, arguments) => self.call(name, arguments),
+            Kind::Construct(id, fields, constructor) => {
+                let mark = self.next_slot;
+                let mut values = Vec::new();
+                for field in fields {
+                    self.expression(field);
+                    self.clone_class(field.ty);
+                    values.push(self.save());
+                }
+                self.emit(format!(
+                    "    mov ecx, {}\n    call ad_object_new\n    xor edx, edx",
+                    fields.len()
+                ));
+                let object = self.save();
+                for (index, value) in values.iter().enumerate() {
+                    self.load(object);
+                    self.emit("    mov r11, rax");
+                    self.load(*value);
+                    self.emit(format!(
+                        "    mov [r11 + {}], rax\n    mov [r11 + {}], rdx",
+                        index * 16,
+                        index * 16 + 8
+                    ));
+                }
+                self.load(object);
+                let receiver = self.save();
+                self.call_saved(constructor, &[receiver]);
+                self.load(object);
+                self.next_slot = mark;
+                let _ = id;
+            }
+            Kind::Field(object, index) => {
+                self.expression(object);
+                self.emit(format!(
+                    "    mov r11, rax\n    mov rax, [r11 + {}]\n    mov rdx, [r11 + {}]",
+                    index * 16,
+                    index * 16 + 8
+                ));
+            }
+            Kind::MethodCall(name, object, arguments) => {
+                let mark = self.next_slot;
+                self.expression(object);
+                let mut slots = vec![self.save()];
+                for argument in arguments {
+                    self.expression(argument);
+                    self.clone_class(argument.ty);
+                    slots.push(self.save());
+                }
+                self.call_saved(name, &slots);
+                self.next_slot = mark;
+            }
             Kind::Negate(value) | Kind::Convert(value) => {
                 let mark = self.next_slot;
                 self.expression(value);
@@ -148,6 +208,7 @@ impl Generator {
             match instruction {
                 Instruction::Assign(slot, value) => {
                     self.expression(value);
+                    self.clone_class(value.ty);
                     self.store(*slot);
                 }
                 Instruction::Clamp(slot, low, high) => {
@@ -169,11 +230,26 @@ impl Generator {
                     self.emit(format!("    lea rcx, {}\n    mov edx, {}\n    mov r8d, {}\n    call ad_print\n    test eax, eax\n    jnz ad_exit_error",memory(slot,0),value.ty.id(),u8::from(*newline)));
                 }
                 Instruction::Call(expr) => self.expression(expr),
-                Instruction::Return => self.emit("    jmp .return"),
+                Instruction::SetField(object, index, value) => {
+                    self.expression(object);
+                    let receiver = self.save();
+                    self.expression(value);
+                    self.clone_class(value.ty);
+                    let field_value = self.save();
+                    self.load(receiver);
+                    self.emit("    mov r11, rax");
+                    self.load(field_value);
+                    self.emit(format!(
+                        "    mov [r11 + {}], rax\n    mov [r11 + {}], rdx",
+                        index * 16,
+                        index * 16 + 8
+                    ));
+                }
+                Instruction::Return => self.emit(format!("    jmp ad_return_{}", function.name)),
             }
             self.next_slot = mark;
         }
-        self.emit(".return:");
+        self.emit(format!("ad_return_{}:", function.name));
         if let Some(slot) = function.result {
             self.load(slot);
         } else {
@@ -181,7 +257,25 @@ impl Generator {
         }
         self.emit("    mov rsp, rbp\n    pop rbp\n    ret");
         let frame = self.max_slot * 16 + 32;
-        self.text.insert_str(start,&format!("ad_fun_{}:\n    push rbp\n    mov rbp, rsp\n    mov r11, {frame}\n.probe:\n    cmp r11, 4096\n    jb .tail\n    sub rsp, 4096\n    test byte [rsp], 0\n    sub r11, 4096\n    jmp .probe\n.tail:\n    sub rsp, r11\n    test byte [rsp], 0\n",function.name));
+        self.text.insert_str(start,&format!("ad_fun_{}:\n    push rbp\n    mov rbp, rsp\n    mov r11, {frame}\nad_probe_{}:\n    cmp r11, 4096\n    jb ad_tail_{}\n    sub rsp, 4096\n    test byte [rsp], 0\n    sub r11, 4096\n    jmp ad_probe_{}\nad_tail_{}:\n    sub rsp, r11\n    test byte [rsp], 0\n",function.name,function.name,function.name,function.name,function.name));
+    }
+    fn call_saved(&mut self, name: &str, slots: &[usize]) {
+        let size = slots.len() * 16;
+        if size != 0 {
+            self.emit(format!("    sub rsp, {size}"));
+        }
+        for (index, slot) in slots.iter().enumerate() {
+            self.load(*slot);
+            self.emit(format!(
+                "    mov [rsp + {}], rax\n    mov [rsp + {}], rdx",
+                index * 16,
+                index * 16 + 8
+            ));
+        }
+        self.emit(format!("    call ad_fun_{name}"));
+        if size != 0 {
+            self.emit(format!("    add rsp, {size}"));
+        }
     }
 }
 pub fn assembly(program: &Program) -> String {
@@ -190,6 +284,7 @@ pub fn assembly(program: &Program) -> String {
         data: Vec::new(),
         next_slot: 0,
         max_slot: 0,
+        class_sizes: program.class_sizes.clone(),
     };
     for function in &program.functions {
         generator.function(function);

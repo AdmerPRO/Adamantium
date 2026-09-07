@@ -14,7 +14,9 @@ fn rejects_invalid_access_with_specific_diagnostics() {
         "var a = 1; var b = a.clamp(0,10);",
         "print.newline((1).field);",
     ] {
-        let error = parse(&format!("fun main() {{ {body} }}")).unwrap_err();
+        let error = parse(&format!("fun main() {{ {body} }}"))
+            .and_then(|program| crate::typed::check(&program).map(|_| ()))
+            .unwrap_err();
         assert!(error.contains("invalid access"), "{body}: {error}");
     }
     assert!(parse("fun main() { var a = 1; a.clamp(0,10); print.newline(a:i64); }").is_ok());
@@ -280,7 +282,7 @@ fn rejects_invalid_programs_with_diagnostics() {
             "not declared",
         ),
         ("fun main() { var print = 1; }", "reserved words"),
-        ("fun main() { var a = 1.5.5; }", "invalid access"),
+        ("fun main() { var a = 1.5.5; }", "expected a name"),
         ("fun main() { var a = 1 }", "expected Symbol(';')"),
         ("fun main() { var a = ; }", "expected an expression"),
         (

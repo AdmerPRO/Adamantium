@@ -137,6 +137,43 @@ fn enum_types_are_preserved_and_cannot_be_mixed() {
 }
 
 #[test]
+fn classes_have_typed_fields_constructors_and_methods() {
+    let source = r#"
+        class MyClass(
+            pub value:int,
+            pub other:int
+        ) {
+            fun __new__() { print.newline("new"); }
+            pub fun set_value(new_value:int) result:int {
+                self.value = new_value;
+                result = self.value;
+            }
+        }
+        fun main() {
+            var object = MyClass(value=1,other=2);
+            object.set_value(10);
+            print.newline(object.value);
+            var copy = object;
+            copy.value = 20;
+            print.newline(object.value);
+            print.newline(copy.value);
+        }
+    "#;
+    let program = checked(source).unwrap();
+    assert_eq!(program.class_sizes, [2]);
+    assert_eq!(program.functions.last().unwrap().types[0], Type::Class(0));
+
+    for source in [
+        "class C(pub value:int) { fun __new__() {} } fun main() { var c = C(value=1,extra=2); }",
+        "class C(pub value:int) { fun __new__() {} } fun main() { var c = C(); }",
+        "class C(value:int) { fun __new__() {} } fun main() { var c = C(value=1); print.newline(c.value); }",
+        "class C(pub value:int) { fun __new__() {} fun hidden() r:int { r=self.value; } } fun main() { var c=C(value=1); c.hidden(); }",
+    ] {
+        assert!(checked(source).is_err(), "accepted {source}");
+    }
+}
+
+#[test]
 fn floating_formats_round_and_preserve_quad_precision() {
     let single = types::literal("16777217", Type::F32).unwrap();
     assert_eq!(types::display(single, Type::F32).unwrap(), "16777216");

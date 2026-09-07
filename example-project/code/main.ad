@@ -9,6 +9,20 @@ enum Status {
     finished,
 }
 
+class Counter(
+    pub value:int,
+    pub step:int
+) {
+    fun __new__() {
+        print.newline("Counter created.");
+    }
+
+    pub fun advance(amount:int) result:int {
+        self.value = self.value + amount;
+        result = self.value;
+    }
+}
+
 fun main() {
     // print.sameline does not append a newline.
     print.sameline("Hello, ");
@@ -110,6 +124,14 @@ fun main() {
     var status = Status.ready;
     status = choose_status(Status.running);
     print.newline(status);
+
+    // Classes initialize named fields, call __new__, and copy by value.
+    var first_counter = Counter(value=1,step=2);
+    first_counter.advance(first_counter.step);
+    var second_counter = first_counter;
+    second_counter.value = 20;
+    print.newline(first_counter.value);
+    print.newline(second_counter.value);
 
     // Calls can be nested inside expressions and arguments are passed by value.
     var result = add(add(1,2), multiply(3,4));

@@ -6,6 +6,8 @@ extern SetConsoleOutputCP
 extern ExitProcess
 extern ad_evaluate
 extern ad_print
+extern ad_object_new
+extern ad_object_clone
 
 section .text
 main:

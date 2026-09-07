@@ -30,6 +30,11 @@ pub fn warnings(program: &Program) -> Vec<String> {
                 }
                 Statement::Print(expr, _) => visit(expr, &mut reads, &mut calls),
                 Statement::Call(call) => visit_call(call, &mut reads, &mut calls),
+                Statement::SetField(object, _, value) => {
+                    visit(object, &mut reads, &mut calls);
+                    visit(value, &mut reads, &mut calls);
+                }
+                Statement::MethodCall(expr) => visit(expr, &mut reads, &mut calls),
                 Statement::Return => returned = true,
             }
         }
@@ -38,7 +43,11 @@ pub fn warnings(program: &Program) -> Vec<String> {
             reads.insert(result);
         }
         for (slot, (name, position)) in function.bindings.iter().enumerate() {
-            if declared.contains(&slot) && !reads.contains(&slot) && !name.starts_with('_') {
+            if declared.contains(&slot)
+                && !reads.contains(&slot)
+                && !name.starts_with('_')
+                && name != "self"
+            {
                 let kind = if slot < function.parameters {
                     "parameter"
                 } else {
@@ -55,6 +64,13 @@ pub fn warnings(program: &Program) -> Vec<String> {
     // Follow calls from main: disconnected recursive groups are unused too.
     let mut reached = HashSet::new();
     let mut pending = vec!["main"];
+    pending.extend(
+        program
+            .functions
+            .iter()
+            .filter(|function| function.owner.is_some())
+            .map(|function| function.name.as_str()),
+    );
     while let Some(name) = pending.pop() {
         if reached.insert(name)
             && let Some(calls) = graph.get(name)
@@ -63,7 +79,10 @@ pub fn warnings(program: &Program) -> Vec<String> {
         }
     }
     for function in &program.functions {
-        if !reached.contains(function.name.as_str()) && !function.name.starts_with('_') {
+        if function.owner.is_none()
+            && !reached.contains(function.name.as_str())
+            && !function.name.starts_with('_')
+        {
             warnings.push(function.position.error(format!(
                 "warning[W003]: unused function '{}' (not reachable from main)",
                 function.name
@@ -85,6 +104,18 @@ fn visit(expr: &Expr, reads: &mut HashSet<usize>, calls: &mut HashSet<String>) {
         }
         Expr::Negate(expr) | Expr::Positive(expr) | Expr::Annotated(expr, _) => {
             visit(expr, reads, calls)
+        }
+        Expr::Construct(_, fields) => {
+            for (_, value) in fields {
+                visit(value, reads, calls);
+            }
+        }
+        Expr::Field(object, _, _) => visit(object, reads, calls),
+        Expr::MethodCall(object, _, arguments, _) => {
+            visit(object, reads, calls);
+            for argument in arguments {
+                visit(argument, reads, calls);
+            }
         }
         _ => (),
     }

@@ -3,6 +3,23 @@ pub mod types;
 use std::io::Write;
 use types::{Type, Value};
 
+#[unsafe(no_mangle)]
+pub extern "C" fn ad_object_new(field_count: usize) -> *mut Value {
+    let fields = vec![Value::default(); field_count].into_boxed_slice();
+    Box::into_raw(fields) as *mut Value
+}
+
+/// # Safety
+/// `source` must point to at least `field_count` initialized values.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ad_object_clone(source: *const Value, field_count: usize) -> *mut Value {
+    if source.is_null() {
+        return std::ptr::null_mut();
+    }
+    let fields = unsafe { std::slice::from_raw_parts(source, field_count) };
+    Box::into_raw(fields.to_vec().into_boxed_slice()) as *mut Value
+}
+
 #[repr(C)]
 pub struct Request {
     pub a: Value,

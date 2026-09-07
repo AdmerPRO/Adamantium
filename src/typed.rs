@@ -3,7 +3,7 @@ use std::collections::HashMap;
 #[path = "typed_tests.rs"]
 mod tests;
 use crate::{
-    syntax::{self, Expr, Operator, Statement},
+    syntax::{self, ClassDefinition, Expr, Operator, Statement},
     types::{self, Type, Value},
 };
 
@@ -19,12 +19,16 @@ pub enum Kind {
     Binary(Operator, Box<Expression>, Box<Expression>),
     Convert(Box<Expression>),
     Call(String, Vec<Expression>),
+    Construct(u32, Vec<Expression>, String),
+    Field(Box<Expression>, usize),
+    MethodCall(String, Box<Expression>, Vec<Expression>),
 }
 pub enum Instruction {
     Assign(usize, Expression),
     Clamp(usize, Expression, Expression),
     Print(Expression, bool),
     Call(Expression),
+    SetField(Expression, usize, Expression),
     Return,
 }
 pub struct Function {
@@ -36,6 +40,7 @@ pub struct Function {
 }
 pub struct Program {
     pub functions: Vec<Function>,
+    pub class_sizes: Vec<usize>,
 }
 struct Signature {
     parameters: Vec<Type>,
@@ -44,6 +49,8 @@ struct Signature {
 struct Checker<'a> {
     types: Vec<Option<Type>>,
     signatures: &'a HashMap<String, Signature>,
+    classes: &'a [ClassDefinition],
+    owner: Option<u32>,
 }
 
 pub fn check(program: &syntax::Program) -> Result<Program, String> {
@@ -68,6 +75,8 @@ pub fn check(program: &syntax::Program) -> Result<Program, String> {
         let mut checker = Checker {
             types: function.types.clone(),
             signatures: &signatures,
+            classes: &program.classes,
+            owner: function.owner,
         };
         let mut instructions = Vec::new();
         for (statement, position) in function.statements.iter().zip(&function.positions) {
@@ -88,7 +97,14 @@ pub fn check(program: &syntax::Program) -> Result<Program, String> {
             instructions,
         });
     }
-    Ok(Program { functions })
+    Ok(Program {
+        functions,
+        class_sizes: program
+            .classes
+            .iter()
+            .map(|class| class.fields.len())
+            .collect(),
+    })
 }
 
 fn promoted(a: Type, b: Type) -> Result<Type, String> {
@@ -140,6 +156,8 @@ impl Checker<'_> {
             Expr::Bool(_) => Some(Type::Bool),
             Expr::None => Some(Type::None),
             Expr::EnumVariant(ty, _) => Some(*ty),
+            Expr::Construct(id, _) => Some(Type::Class(*id)),
+            Expr::Field(_, _, _) | Expr::MethodCall(_, _, _, _) => None,
             Expr::Negate(e) | Expr::Positive(e) => self.hint(e),
             Expr::Binary(_, a, b) => match (self.hint(a), self.hint(b)) {
                 (Some(a), Some(b)) => promoted(a, b).ok(),
@@ -204,6 +222,38 @@ impl Checker<'_> {
                     hi: 0,
                 }),
             },
+            Expr::Construct(id, provided) => {
+                let class = &self.classes[*id as usize];
+                let mut fields = Vec::new();
+                for field in &class.fields {
+                    let matching = provided
+                        .iter()
+                        .filter(|(name, _)| name == &field.name)
+                        .collect::<Vec<_>>();
+                    if matching.len() != 1 {
+                        return Err(format!(
+                            "class '{}' requires field '{}' exactly once",
+                            class.name, field.name
+                        ));
+                    }
+                    fields.push(self.expression(&matching[0].1, Some(field.ty))?);
+                }
+                if provided.len() != class.fields.len() {
+                    let unknown = provided
+                        .iter()
+                        .find(|(name, _)| !class.fields.iter().any(|field| field.name == *name))
+                        .map(|(name, _)| name.as_str())
+                        .unwrap_or("duplicate field");
+                    return Err(format!(
+                        "invalid field '{unknown}' for class '{}'",
+                        class.name
+                    ));
+                }
+                Expression {
+                    ty: Type::Class(*id),
+                    kind: Kind::Construct(*id, fields, format!("{}____new__", class.name)),
+                }
+            }
             Expr::Variable(slot) => Expression {
                 ty: self.types[*slot].ok_or("variable type is not known")?,
                 kind: Kind::Variable(*slot),
@@ -220,6 +270,75 @@ impl Checker<'_> {
                 Expression {
                     ty: signature.result,
                     kind: Kind::Call(call.name.clone(), arguments),
+                }
+            }
+            Expr::Field(object, field_name, position) => {
+                let object = self.expression(object, None)?;
+                let Type::Class(id) = object.ty else {
+                    return Err(
+                        position.error(format!("invalid access: {} has no fields", object.ty))
+                    );
+                };
+                let class = &self.classes[id as usize];
+                let (index, field) = class
+                    .fields
+                    .iter()
+                    .enumerate()
+                    .find(|(_, field)| field.name == *field_name)
+                    .ok_or_else(|| {
+                        position.error(format!(
+                            "invalid access: class '{}' has no field '{field_name}'",
+                            class.name
+                        ))
+                    })?;
+                if !field.public && self.owner != Some(id) {
+                    return Err(
+                        position.error(format!("invalid access: field '{field_name}' is private"))
+                    );
+                }
+                Expression {
+                    ty: field.ty,
+                    kind: Kind::Field(Box::new(object), index),
+                }
+            }
+            Expr::MethodCall(object, method_name, arguments, position) => {
+                let object = self.expression(object, None)?;
+                let Type::Class(id) = object.ty else {
+                    return Err(
+                        position.error(format!("invalid access: {} has no methods", object.ty))
+                    );
+                };
+                let class = &self.classes[id as usize];
+                let method = class
+                    .methods
+                    .iter()
+                    .find(|method| method.name == *method_name)
+                    .ok_or_else(|| {
+                        position.error(format!(
+                            "invalid access: class '{}' has no method '{method_name}'",
+                            class.name
+                        ))
+                    })?;
+                if method.name == "__new__" || (!method.public && self.owner != Some(id)) {
+                    return Err(position
+                        .error(format!("invalid access: method '{method_name}' is private")));
+                }
+                let signature = &self.signatures[&method.function];
+                if arguments.len() + 1 != signature.parameters.len() {
+                    return Err(position.error(format!(
+                        "method '{method_name}' expects {} arguments, found {}",
+                        signature.parameters.len() - 1,
+                        arguments.len()
+                    )));
+                }
+                let arguments = arguments
+                    .iter()
+                    .zip(&signature.parameters[1..])
+                    .map(|(argument, ty)| self.expression(argument, Some(*ty)))
+                    .collect::<Result<_, _>>()?;
+                Expression {
+                    ty: signature.result,
+                    kind: Kind::MethodCall(method.function.clone(), Box::new(object), arguments),
                 }
             }
             Expr::Negate(value) => {
@@ -299,6 +418,29 @@ impl Checker<'_> {
                     kind: Kind::Call(call.name.clone(), arguments),
                 })
             }
+            Statement::SetField(object, field_name, value) => {
+                let object = self.expression(object, None)?;
+                let Type::Class(id) = object.ty else {
+                    return Err(format!("invalid access: {} has no fields", object.ty));
+                };
+                let class = &self.classes[id as usize];
+                let (index, field) = class
+                    .fields
+                    .iter()
+                    .enumerate()
+                    .find(|(_, field)| field.name == *field_name)
+                    .ok_or_else(|| {
+                        format!(
+                            "invalid access: class '{}' has no field '{field_name}'",
+                            class.name
+                        )
+                    })?;
+                if !field.public && self.owner != Some(id) {
+                    return Err(format!("invalid access: field '{field_name}' is private"));
+                }
+                Instruction::SetField(object, index, self.expression(value, Some(field.ty))?)
+            }
+            Statement::MethodCall(expr) => Instruction::Call(self.expression(expr, None)?),
         })
     }
 }

@@ -21,6 +21,7 @@ pub enum Type {
     Bool,
     None,
     Enum(u32),
+    Class(u32),
 }
 
 impl Type {
@@ -47,6 +48,9 @@ impl Type {
     pub fn from_id(id: u32) -> Option<Self> {
         if id & 0x8000_0000 != 0 {
             return Some(Self::Enum(id & 0x7fff_ffff));
+        }
+        if id & 0x4000_0000 != 0 {
+            return Some(Self::Class(id & 0x3fff_ffff));
         }
         [
             Self::I8,
@@ -86,6 +90,7 @@ impl Type {
             Self::Bool => 13,
             Self::None => 14,
             Self::Enum(id) => 0x8000_0000 | id,
+            Self::Class(id) => 0x4000_0000 | id,
         }
     }
     pub fn integer(self) -> bool {
@@ -148,6 +153,7 @@ impl std::fmt::Display for Type {
             Self::Bool => "bool",
             Self::None => "None",
             Self::Enum(_) => "enum",
+            Self::Class(_) => "class",
         })
     }
 }
@@ -319,6 +325,7 @@ pub fn display(value: Value, ty: Type) -> Result<String, String> {
         Type::Bool => if value.lo == 0 { "false" } else { "true" }.into(),
         Type::None => "None".into(),
         Type::Enum(_) => value.lo.to_string(),
+        Type::Class(_) => return Err("class objects cannot be printed directly".into()),
         _ => return Err("string values must be written as UTF-8 bytes".into()),
     })
 }

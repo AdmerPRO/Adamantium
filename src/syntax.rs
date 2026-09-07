@@ -52,8 +52,11 @@ pub enum Expr {
     Bool(bool),
     None,
     EnumVariant(Type, u32),
+    Construct(u32, Vec<(String, Expr)>),
     Annotated(Box<Expr>, Type),
     Variable(usize),
+    Field(Box<Expr>, String, Position),
+    MethodCall(Box<Expr>, String, Vec<Expr>, Position),
     Negate(Box<Expr>),
     Positive(Box<Expr>),
     Binary(Operator, Box<Expr>, Box<Expr>),
@@ -71,6 +74,8 @@ pub enum Statement {
     Clamp(usize, Expr, Expr),
     Print(Expr, bool),
     Call(Call),
+    SetField(Expr, String, Expr),
+    MethodCall(Expr),
     Return,
 }
 #[derive(Debug)]
@@ -83,10 +88,31 @@ pub struct Function {
     pub types: Vec<Option<Type>>,
     pub bindings: Vec<(String, Position)>,
     pub position: Position,
+    pub owner: Option<u32>,
+}
+#[derive(Clone, Debug)]
+pub struct ClassField {
+    pub name: String,
+    pub ty: Type,
+    pub public: bool,
+}
+#[derive(Clone, Debug)]
+pub struct ClassMethod {
+    pub name: String,
+    pub function: String,
+    pub public: bool,
+}
+#[derive(Clone, Debug)]
+pub struct ClassDefinition {
+    pub id: u32,
+    pub name: String,
+    pub fields: Vec<ClassField>,
+    pub methods: Vec<ClassMethod>,
 }
 #[derive(Debug)]
 pub struct Program {
     pub functions: Vec<Function>,
+    pub classes: Vec<ClassDefinition>,
 }
 struct Binding {
     slot: usize,
@@ -105,6 +131,7 @@ struct Parser {
     types: Vec<Option<Type>>,
     declarations: Vec<(String, Position)>,
     enums: HashMap<String, EnumDefinition>,
+    classes: HashMap<String, ClassDefinition>,
 }
 
 fn lex(source: &str) -> Result<Vec<(Token, Position)>, String> {
@@ -292,6 +319,7 @@ impl Parser {
                     "class",
                     "use",
                     "pack",
+                    "pub",
                 ]
                 .contains(&name.as_str())
                     && Type::parse(&name).is_none() =>
@@ -347,6 +375,11 @@ impl Parser {
         };
         Type::parse(&name)
             .or_else(|| self.enums.get(&name).map(|definition| definition.ty))
+            .or_else(|| {
+                self.classes
+                    .get(&name)
+                    .map(|definition| Type::Class(definition.id))
+            })
             .ok_or_else(|| position.error(format!("unsupported type '{name}'")))
     }
     fn writable_variable(&self, name: &str, position: Position) -> Result<usize, String> {
@@ -428,10 +461,27 @@ impl Parser {
                         variant_position.error(format!("enum '{name}' has no variant '{variant}'"))
                     })?;
                     Expr::EnumVariant(definition.ty, value)
+                } else if self.classes.contains_key(&name) && self.peek() == &Token::Symbol('(') {
+                    self.next();
+                    let mut fields = Vec::new();
+                    if !self.take(Token::Symbol(')')) {
+                        loop {
+                            let field = self.name()?;
+                            self.symbol('=')?;
+                            fields.push((field, self.expression(0)?));
+                            if self.take(Token::Symbol(')')) {
+                                break;
+                            }
+                            self.symbol(',')?;
+                        }
+                    }
+                    Expr::Construct(self.classes[&name].id, fields)
                 } else if self.peek() == &Token::Symbol('(') {
                     Expr::Call(self.arguments(name, position)?)
                 } else {
-                    self.reject_access()?;
+                    if self.peek() == &Token::Symbol(':') {
+                        self.reject_access()?;
+                    }
                     Expr::Variable(self.variable(&name, true, position)?)
                 }
             }
@@ -440,7 +490,33 @@ impl Parser {
         self.expression_tail(left, min_precedence)
     }
     fn expression_tail(&mut self, mut left: Expr, min_precedence: u8) -> Result<Expr, String> {
-        self.reject_access()?;
+        while self.take(Token::Symbol('.')) {
+            let position = self.position();
+            let member = self.name()?;
+            if self.take(Token::Symbol('(')) {
+                if let Expr::Variable(slot) = &left
+                    && self
+                        .bindings
+                        .values()
+                        .any(|binding| binding.slot == *slot && !binding.changeable)
+                {
+                    return Err(position.error("cannot call a method on a static variable"));
+                }
+                let mut arguments = Vec::new();
+                if !self.take(Token::Symbol(')')) {
+                    loop {
+                        arguments.push(self.expression(0)?);
+                        if self.take(Token::Symbol(')')) {
+                            break;
+                        }
+                        self.symbol(',')?;
+                    }
+                }
+                left = Expr::MethodCall(Box::new(left), member, arguments, position);
+            } else {
+                left = Expr::Field(Box::new(left), member, position);
+            }
+        }
         while let Token::Symbol(c) = self.peek() {
             let Some(operator) = Operator::from_char(*c) else {
                 break;
@@ -460,7 +536,11 @@ impl Parser {
         if min_precedence == 0 && self.take(Token::Symbol(':')) {
             left = Expr::Annotated(Box::new(left), self.type_name()?);
         }
-        self.reject_access()?;
+        if matches!(self.peek(), Token::Symbol('[')) {
+            return Err(self
+                .position()
+                .error("invalid access: indexing is not supported"));
+        }
         Ok(left)
     }
     fn reject_access(&self) -> Result<(), String> {
@@ -519,19 +599,40 @@ impl Parser {
                 if self.peek() == &Token::Symbol('(') {
                     Statement::Call(self.arguments(name, position)?)
                 } else if self.take(Token::Symbol('.')) {
-                    self.writable_variable(&name, position)?;
                     let slot = self.variable(&name, true, position)?;
-                    if !self.take(Token::Word("clamp".into())) {
-                        return Err(self.position().error(
-                            "invalid access: the only supported variable method is clamp(min,max)",
-                        ));
+                    let member_position = self.position();
+                    let member = self.name()?;
+                    if member == "clamp" {
+                        self.writable_variable(&name, position)?;
+                        self.symbol('(')?;
+                        let low = self.expression(0)?;
+                        self.symbol(',')?;
+                        let high = self.expression(0)?;
+                        self.symbol(')')?;
+                        Statement::Clamp(slot, low, high)
+                    } else if self.take(Token::Symbol('(')) {
+                        self.writable_variable(&name, position)?;
+                        let mut arguments = Vec::new();
+                        if !self.take(Token::Symbol(')')) {
+                            loop {
+                                arguments.push(self.expression(0)?);
+                                if self.take(Token::Symbol(')')) {
+                                    break;
+                                }
+                                self.symbol(',')?;
+                            }
+                        }
+                        Statement::MethodCall(Expr::MethodCall(
+                            Box::new(Expr::Variable(slot)),
+                            member,
+                            arguments,
+                            member_position,
+                        ))
+                    } else {
+                        self.writable_variable(&name, position)?;
+                        self.symbol('=')?;
+                        Statement::SetField(Expr::Variable(slot), member, self.expression(0)?)
                     }
-                    self.symbol('(')?;
-                    let low = self.expression(0)?;
-                    self.symbol(',')?;
-                    let high = self.expression(0)?;
-                    self.symbol(')')?;
-                    Statement::Clamp(slot, low, high)
                 } else {
                     self.reject_access()?;
                     let slot = self.writable_variable(&name, position)?;
@@ -565,13 +666,25 @@ impl Parser {
         Ok(statement)
     }
     fn function(&mut self) -> Result<Function, String> {
+        self.function_owned(None)
+    }
+    fn function_owned(&mut self, owner: Option<(String, u32)>) -> Result<Function, String> {
         self.bindings.clear();
         self.types.clear();
         self.declarations.clear();
         self.result_name = None;
         let function_position = self.position();
+        if let Some((_, id)) = &owner {
+            self.bind(
+                "self".into(),
+                true,
+                true,
+                Some(Type::Class(*id)),
+                function_position,
+            )?;
+        }
         self.word("fun")?;
-        let name = self.name()?;
+        let source_name = self.name()?;
         self.symbol('(')?;
         if !self.take(Token::Symbol(')')) {
             loop {
@@ -587,9 +700,14 @@ impl Parser {
             }
         }
         let parameters = self.bindings.len();
-        let result = if name == "main" {
+        let result = if source_name == "main" && owner.is_none() {
             if parameters != 0 {
                 return Err(self.position().error("main must have no parameters"));
+            }
+            None
+        } else if source_name == "__new__" && owner.is_some() {
+            if parameters != 1 {
+                return Err(self.position().error("__new__ must have no parameters"));
             }
             None
         } else {
@@ -627,6 +745,10 @@ impl Parser {
             self.variable(name, true, self.position())?;
         }
         self.symbol('}')?;
+        let name = owner.as_ref().map_or_else(
+            || source_name.clone(),
+            |(class, _)| format!("{class}__{source_name}"),
+        );
         Ok(Function {
             name,
             parameters,
@@ -636,6 +758,7 @@ impl Parser {
             types: self.types.clone(),
             bindings: self.declarations.clone(),
             position: function_position,
+            owner: owner.map(|(_, id)| id),
         })
     }
     fn enum_declaration(&mut self) -> Result<String, String> {
@@ -679,6 +802,102 @@ impl Parser {
         );
         Ok(name)
     }
+    fn class_declaration(&mut self) -> Result<Vec<Function>, String> {
+        self.word("class")?;
+        let position = self.position();
+        let name = self.name()?;
+        if self.classes.contains_key(&name) {
+            return Err(position.error(format!("class '{name}' is already declared")));
+        }
+        if self.enums.contains_key(&name) {
+            return Err(position.error(format!("'{name}' is already declared as an enum")));
+        }
+        let id = self.classes.len() as u32;
+        self.classes.insert(
+            name.clone(),
+            ClassDefinition {
+                id,
+                name: name.clone(),
+                fields: Vec::new(),
+                methods: Vec::new(),
+            },
+        );
+        self.symbol('(')?;
+        let mut fields = Vec::new();
+        if !self.take(Token::Symbol(')')) {
+            loop {
+                let public = self.take(Token::Word("pub".into()));
+                let field_position = self.position();
+                let field = self.name()?;
+                self.symbol(':')?;
+                let ty = self.type_name()?;
+                if matches!(ty, Type::Class(_)) {
+                    return Err(field_position.error(
+                        "class-typed fields are not supported yet because class copies must be independent",
+                    ));
+                }
+                if fields.iter().any(|value: &ClassField| value.name == field) {
+                    return Err(
+                        field_position.error(format!("field '{field}' is already declared"))
+                    );
+                }
+                fields.push(ClassField {
+                    name: field,
+                    ty,
+                    public,
+                });
+                if self.take(Token::Symbol(')')) {
+                    break;
+                }
+                self.symbol(',')?;
+                if self.take(Token::Symbol(')')) {
+                    break;
+                }
+            }
+        }
+        self.classes.get_mut(&name).unwrap().fields = fields;
+        self.symbol('{')?;
+        let mut functions = Vec::new();
+        let mut methods = Vec::new();
+        let mut has_constructor = false;
+        while self.peek() != &Token::Symbol('}') {
+            let public = self.take(Token::Word("pub".into()));
+            if self.peek() != &Token::Word("fun".into()) {
+                return Err(self.position().error("expected a class method"));
+            }
+            let method_name = match self.tokens.get(self.cursor + 1) {
+                Some((Token::Word(value), _)) => value.clone(),
+                _ => return Err(self.position().error("expected a method name")),
+            };
+            if methods
+                .iter()
+                .any(|value: &ClassMethod| value.name == method_name)
+            {
+                return Err(self
+                    .position()
+                    .error(format!("method '{method_name}' is already declared")));
+            }
+            if method_name == "__new__" {
+                if public {
+                    return Err(self.position().error("__new__ cannot be public"));
+                }
+                has_constructor = true;
+            }
+            let function = self.function_owned(Some((name.clone(), id)))?;
+            methods.push(ClassMethod {
+                name: method_name,
+                function: function.name.clone(),
+                public,
+            });
+            functions.push(function);
+        }
+        self.symbol('}')?;
+        if !has_constructor {
+            return Err(position.error(format!("class '{name}' must declare fun __new__()")));
+        }
+        self.classes.get_mut(&name).unwrap().methods = methods;
+        Ok(functions)
+    }
     fn reject_import(&self) -> Result<(), String> {
         if let Token::Word(keyword) = self.peek()
             && (keyword == "use" || keyword == "pack")
@@ -699,6 +918,7 @@ pub fn parse(source: &str) -> Result<Program, String> {
         types: Vec::new(),
         declarations: Vec::new(),
         enums: HashMap::new(),
+        classes: HashMap::new(),
     };
     let mut functions = Vec::new();
     let mut signatures = HashMap::new();
@@ -710,12 +930,44 @@ pub fn parse(source: &str) -> Result<Program, String> {
             if signatures.contains_key(&name) {
                 return Err(position.error(format!("'{name}' is already declared as a function")));
             }
+            if parser.classes.contains_key(&name) {
+                return Err(position.error(format!("'{name}' is already declared as a class")));
+            }
+            continue;
+        }
+        if parser.peek() == &Token::Word("class".into()) {
+            if let Some((Token::Word(class_name), _)) = parser.tokens.get(parser.cursor + 1)
+                && signatures.contains_key(class_name)
+            {
+                return Err(
+                    position.error(format!("'{class_name}' is already declared as a function"))
+                );
+            }
+            let methods = parser.class_declaration()?;
+            for method in methods {
+                if signatures
+                    .insert(method.name.clone(), method.parameters)
+                    .is_some()
+                {
+                    return Err(position.error(format!(
+                        "generated method name '{}' conflicts with a function",
+                        method.name
+                    )));
+                }
+                functions.push(method);
+            }
             continue;
         }
         let function = parser.function()?;
         if parser.enums.contains_key(&function.name) {
             return Err(position.error(format!(
                 "'{}' is already declared as an enum",
+                function.name
+            )));
+        }
+        if parser.classes.contains_key(&function.name) {
+            return Err(position.error(format!(
+                "'{}' is already declared as a class",
                 function.name
             )));
         }
@@ -741,11 +993,18 @@ pub fn parse(source: &str) -> Result<Program, String> {
                     validate_expr(high, &signatures)?;
                 }
                 Statement::Call(call) => validate_call(call, &signatures)?,
+                Statement::SetField(object, _, value) => {
+                    validate_expr(object, &signatures)?;
+                    validate_expr(value, &signatures)?;
+                }
+                Statement::MethodCall(expr) => validate_expr(expr, &signatures)?,
                 _ => (),
             }
         }
     }
-    Ok(Program { functions })
+    let mut classes = parser.classes.into_values().collect::<Vec<_>>();
+    classes.sort_by_key(|class| class.id);
+    Ok(Program { functions, classes })
 }
 fn validate_expr(expr: &Expr, signatures: &HashMap<String, usize>) -> Result<(), String> {
     match expr {
@@ -756,6 +1015,20 @@ fn validate_expr(expr: &Expr, signatures: &HashMap<String, usize>) -> Result<(),
         }
         Expr::Negate(expr) | Expr::Positive(expr) | Expr::Annotated(expr, _) => {
             validate_expr(expr, signatures)
+        }
+        Expr::Construct(_, fields) => {
+            for (_, value) in fields {
+                validate_expr(value, signatures)?;
+            }
+            Ok(())
+        }
+        Expr::Field(object, _, _) => validate_expr(object, signatures),
+        Expr::MethodCall(object, _, arguments, _) => {
+            validate_expr(object, signatures)?;
+            for argument in arguments {
+                validate_expr(argument, signatures)?;
+            }
+            Ok(())
         }
         _ => Ok(()),
     }

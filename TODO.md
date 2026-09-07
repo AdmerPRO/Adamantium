@@ -217,7 +217,7 @@ Implement:
 * [ ] `offset`
 * [ ] `List`
 * [x] `enum` — named variants with distinct inferred types
-* [ ] `class`
+* [x] `class` — required typed fields, methods, construction and value copying
 * [ ] `fun`
 
 ### Type aliases
@@ -441,15 +441,15 @@ class Player (
 }
 ```
 
-* [ ] Implement class declarations
-* [ ] Implement fields
-* [ ] Implement field types
-* [ ] Implement methods
-* [ ] Implement `self`
+* [x] Implement class declarations
+* [x] Implement fields — required named initialization; class-typed fields pending deep copy support
+* [x] Implement field types
+* [x] Implement methods
+* [x] Implement `self`
 * [ ] Implement class visibility
-* [ ] Implement object creation
-* [ ] Implement object field access
-* [ ] Implement object method calls
+* [x] Implement object creation — named field arguments with value-copy semantics
+* [x] Implement object field access
+* [x] Implement object method calls
 * [ ] Implement optional fields
 * [ ] Implement class scope rules
 
@@ -465,8 +465,8 @@ __change__
 __remove__
 ```
 
-* [ ] Implement `__new__`
-* [ ] Automatically call `__new__` on object creation
+* [x] Implement `__new__`
+* [x] Automatically call `__new__` on object creation
 * [ ] Implement `__change__`
 * [ ] Call `__change__` on class/object changes
 * [ ] Implement `__remove__`
@@ -1104,7 +1104,7 @@ Adamantium must remain memory-safe.
 * [ ] Generate loops
 * [x] Generate function calls
 * [x] Generate returns
-* [ ] Generate classes
+* [x] Generate classes — runtime-backed field storage, method calls and independent copies
 * [ ] Generate lists
 * [x] Generate strings — read-only UTF-8 storage with pointer/length values
 * [ ] Generate aliases
@@ -1161,7 +1161,7 @@ Create the official standard library.
 * [x] Variables — currently supported declarations and mutability
 * [x] Types — supported scalar types, defaults, and suffix annotations
 * [x] Functions — typed parameters and named-result behavior
-* [ ] Classes
+* [x] Classes
 * [ ] Enums
 * [ ] Modules
 * [ ] Packages
@@ -1238,7 +1238,7 @@ Create the official standard library.
 * [x] Type checker tests
 * [x] Semantic analysis tests
 * [ ] Module tests
-* [ ] Class tests
+* [x] Class tests — parsing, typing, visibility, construction, mutation and native copying
 * [ ] Enum tests
 * [ ] Alias tests
 * [ ] Memory-safety tests

@@ -11,6 +11,53 @@ static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_classes_construct_mutate_and_copy_values() {
+    let output = Project::new(
+        r#"
+        class MyClass(pub value:int,pub other:int) {
+            fun __new__() { print.newline("new"); }
+            pub fun set_value(new_value:int) result:int {
+                self.value = new_value;
+                result = self.value;
+            }
+        }
+        fun main() {
+            var first = MyClass(value=1,other=2);
+            var changed = first.set_value(10);
+            var second = first;
+            second.set_value(20);
+            var third = copy_object(first);
+            third.value = 30;
+            print.newline(changed);
+            print.newline(first.value);
+            print.newline(second.value);
+            print.newline(second.other);
+            print.newline(change_argument(first));
+            print.newline(first.value);
+            print.newline(third.value);
+        }
+        fun change_argument(value:MyClass) result:int {
+            value.value = 40;
+            result = value.value;
+        }
+        fun copy_object(value:MyClass) result:MyClass { result = value; }
+        "#,
+    )
+    .run();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.stdout,
+        b"new\r\n10\r\n10\r\n20\r\n2\r\n40\r\n10\r\n30\r\n"
+    );
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_enum_values_can_be_stored_passed_and_printed() {
     let output = Project::new(
         "enum Choice { first, second } fun main() { var value = choose(Choice.second); print.newline(value); } fun choose(value:Choice) result:Choice { result = value; }",
