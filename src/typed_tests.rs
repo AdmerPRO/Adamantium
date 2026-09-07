@@ -225,3 +225,39 @@ fn match_patterns_must_have_the_matched_type() {
     assert!(checked("fun main() { match 1 { 1 => {} 1 => {} } }").is_err());
     assert!(checked("fun main() { var pattern=1; match 1 { pattern => {} } }").is_err());
 }
+
+#[test]
+fn aliases_share_types_and_disconnect_scalar_values() {
+    let program = checked("fun main() { var a=10; var b=a.as_variable; a=20; b=15; b.disconect; a=25; print.newline(b); }").unwrap();
+    assert_eq!(program.functions[0].types, [Type::I32, Type::I32]);
+    assert!(
+        checked("enum E { one } fun main() { var a=E.one; var b=a.as_variable; b.disconect; }")
+            .is_err()
+    );
+    assert!(
+        checked(
+            r#"
+        enum E { one }
+        class C(pub value:int) { fun __new__() {} }
+        fun main() {
+            var symbol=identity().as_variable;
+            symbol=E.as_variable;
+            var choice=symbol.one;
+            var ClassAlias=C.as_variable;
+            var object=ClassAlias(value=1);
+            print.newline(choice);
+            print.newline(object.value);
+        }
+        fun identity(value:int) r:int { r=value; }
+    "#
+        )
+        .is_ok()
+    );
+    assert!(
+        crate::syntax::parse(
+            "fun main() { var f=work().as_variable; f.disconect; } fun work() r:None {}"
+        )
+        .unwrap_err()
+        .contains("cannot be disconnected")
+    );
+}

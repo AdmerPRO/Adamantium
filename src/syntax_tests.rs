@@ -419,3 +419,33 @@ fn parses_match_branches_and_fallback() {
             .contains("must be last")
     );
 }
+
+#[test]
+fn parses_value_and_symbol_aliases() {
+    assert!(
+        parse(
+            r#"
+        enum Choice { first, second }
+        class Box(pub value:int) { fun __new__() {} }
+        fun main() {
+            var value=10;
+            var alias=value.as_variable;
+            alias=20;
+            alias.disconect;
+            var operation=add().as_variable;
+            operation(1,2);
+            operation=nothing().as_variable;
+            operation();
+            var E=Choice.as_variable;
+            var choice=E.first;
+            var B=Box.as_variable;
+            var boxed=B(value=choice);
+        }
+        fun add(a:int,b:int) r:int { r=a+b; }
+        fun nothing() r:None {}
+    "#
+        )
+        .is_ok()
+    );
+    assert!(parse("fun main() { var alias=missing().as_variable; }").is_err());
+}

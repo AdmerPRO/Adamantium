@@ -107,6 +107,21 @@ fun main() {
     print.newline(arithmetic);
     print.newline(explicit_changeable);
 
+    // Value aliases share changes until they are disconnected.
+    var shared_value = 10;
+    var shared_alias = shared_value.as_variable;
+    shared_value = 20;
+    print.newline(shared_alias);
+    shared_alias.disconect;
+    shared_value = 30;
+    print.newline(shared_alias);
+
+    // Function aliases are callable and may be redirected.
+    var calculation = add().as_variable;
+    print.newline(calculation(2,3));
+    calculation = multiply().as_variable;
+    print.newline(calculation(2,3));
+
     // Comparisons produce bool values. A for range excludes its upper bound.
     if arithmetic >= 10 then {
         print.newline("The if branch ran.");
@@ -147,6 +162,8 @@ fun main() {
 
     // Enum variants have their own enum type and print their zero-based index.
     var status = Status.ready;
+    var StatusAlias = Status.as_variable;
+    status = StatusAlias.ready;
     status = choose_status(Status.running);
     print.newline(status);
     match status {
@@ -157,7 +174,8 @@ fun main() {
     }
 
     // Classes initialize named fields, call __new__, and copy by value.
-    var first_counter = Counter(value=1,step=2);
+    var CounterAlias = Counter.as_variable;
+    var first_counter = CounterAlias(value=1,step=2);
     first_counter.advance(first_counter.step);
     var second_counter = first_counter;
     second_counter.value = 20;

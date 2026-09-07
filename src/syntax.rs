@@ -80,7 +80,9 @@ pub struct Call {
 }
 #[derive(Debug)]
 pub enum Statement {
+    Noop(Option<String>),
     Assign(usize, Expr),
+    Disconnect(usize, usize),
     Clamp(usize, Expr, Expr),
     Print(Expr, bool),
     Call(Call),
@@ -136,6 +138,13 @@ struct Binding {
     slot: usize,
     initialized: bool,
     changeable: bool,
+    alias: bool,
+}
+#[derive(Clone)]
+enum SymbolAlias {
+    Function(String),
+    Enum(String),
+    Class(String),
 }
 struct EnumDefinition {
     ty: Type,
@@ -151,6 +160,7 @@ struct Parser {
     enums: HashMap<String, EnumDefinition>,
     classes: HashMap<String, ClassDefinition>,
     loop_depth: usize,
+    symbol_aliases: HashMap<String, SymbolAlias>,
 }
 
 fn lex(source: &str) -> Result<Vec<(Token, Position)>, String> {
@@ -372,10 +382,10 @@ impl Parser {
                 "variable '{name}' conflicts with an enum of the same name"
             )));
         }
-        if self.bindings.contains_key(&name) {
+        if self.bindings.contains_key(&name) || self.symbol_aliases.contains_key(&name) {
             return Err(position.error(format!("variable '{name}' is already declared")));
         }
-        let slot = self.bindings.len();
+        let slot = self.types.len();
         self.declarations.push((name.clone(), position));
         self.types.push(ty);
         self.bindings.insert(
@@ -384,9 +394,53 @@ impl Parser {
                 slot,
                 initialized,
                 changeable,
+                alias: false,
             },
         );
         Ok(slot)
+    }
+    fn alias_target(&mut self) -> Result<SymbolAlias, String> {
+        let position = self.position();
+        let Token::Word(target) = self.next() else {
+            return Err(position.error("expected a variable, function, enum or class name"));
+        };
+        let target = self
+            .symbol_aliases
+            .get(&target)
+            .cloned()
+            .unwrap_or_else(|| {
+                if self.enums.contains_key(&target) {
+                    SymbolAlias::Enum(target.clone())
+                } else if self.classes.contains_key(&target) {
+                    SymbolAlias::Class(target.clone())
+                } else {
+                    SymbolAlias::Function(target.clone())
+                }
+            });
+        if matches!(target, SymbolAlias::Function(_)) {
+            self.symbol('(')?;
+            self.symbol(')')?;
+        }
+        self.symbol('.')?;
+        self.word("as_variable")?;
+        Ok(target)
+    }
+    fn is_alias_target(&self) -> bool {
+        let Some((Token::Word(name), _)) = self.tokens.get(self.cursor) else {
+            return false;
+        };
+        let offset = if self.enums.contains_key(name) || self.classes.contains_key(name) {
+            1
+        } else {
+            3
+        };
+        self.tokens
+            .get(self.cursor + offset)
+            .is_some_and(|(token, _)| token == &Token::Symbol('.'))
+            && self
+                .tokens
+                .get(self.cursor + offset + 1)
+                .is_some_and(|(token, _)| token == &Token::Word("as_variable".into()))
     }
     fn variable(&self, name: &str, read: bool, position: Position) -> Result<usize, String> {
         let binding = self
@@ -480,6 +534,14 @@ impl Parser {
                 inner
             }
             Token::Word(name) => {
+                let name = match self.symbol_aliases.get(&name) {
+                    Some(
+                        SymbolAlias::Function(target)
+                        | SymbolAlias::Enum(target)
+                        | SymbolAlias::Class(target),
+                    ) => target.clone(),
+                    None => name,
+                };
                 if self.enums.contains_key(&name) && self.peek() == &Token::Symbol('.') {
                     self.next();
                     let variant_position = self.position();
@@ -655,6 +717,60 @@ impl Parser {
                 };
                 let name = self.name()?;
                 self.symbol('=')?;
+                if self.is_alias_target() {
+                    if !changeable {
+                        return Err(position.error("symbol aliases cannot be static"));
+                    }
+                    let target = self.alias_target()?;
+                    if self.bindings.contains_key(&name) || self.symbol_aliases.contains_key(&name)
+                    {
+                        return Err(
+                            position.error(format!("variable '{name}' is already declared"))
+                        );
+                    }
+                    let function = if let SymbolAlias::Function(target) = &target {
+                        Some(target.clone())
+                    } else {
+                        None
+                    };
+                    self.symbol_aliases.insert(name, target);
+                    self.symbol(';')?;
+                    return Ok(Statement::Noop(function));
+                }
+                if let (
+                    Token::Word(source),
+                    Some((Token::Symbol('.'), _)),
+                    Some((Token::Word(method), _)),
+                ) = (
+                    self.peek(),
+                    self.tokens.get(self.cursor + 1),
+                    self.tokens.get(self.cursor + 2),
+                ) && method == "as_variable"
+                {
+                    let source = source.clone();
+                    let source_slot = self.variable(&source, true, position)?;
+                    self.next();
+                    self.next();
+                    self.next();
+                    if self.bindings.contains_key(&name) || self.symbol_aliases.contains_key(&name)
+                    {
+                        return Err(
+                            position.error(format!("variable '{name}' is already declared"))
+                        );
+                    }
+                    let source_changeable = self.bindings[&source].changeable;
+                    self.bindings.insert(
+                        name,
+                        Binding {
+                            slot: source_slot,
+                            initialized: true,
+                            changeable: changeable && source_changeable,
+                            alias: true,
+                        },
+                    );
+                    self.symbol(';')?;
+                    return Ok(Statement::Noop(None));
+                }
                 let value = self.expression(0)?;
                 let slot = self.bind(name, true, changeable, None, position)?;
                 Statement::Assign(slot, value)
@@ -680,13 +796,61 @@ impl Parser {
                 Statement::Return
             }
             Token::Word(name) => {
-                if self.peek() == &Token::Symbol('(') {
+                if self.symbol_aliases.contains_key(&name) {
+                    if self.peek() == &Token::Symbol('(') {
+                        let SymbolAlias::Function(target) = self.symbol_aliases[&name].clone()
+                        else {
+                            return Err(
+                                position.error(format!("symbol alias '{name}' is not callable"))
+                            );
+                        };
+                        Statement::Call(self.arguments(target, position)?)
+                    } else {
+                        if self.peek() == &Token::Symbol('.')
+                            && self.tokens.get(self.cursor + 1).is_some_and(|(token, _)| {
+                                matches!(token, Token::Word(method) if method == "disconect" || method == "disconnect")
+                            })
+                        {
+                            return Err(position.error("function, enum and class aliases cannot be disconnected"));
+                        }
+                        self.symbol('=')?;
+                        let target = self.alias_target()?;
+                        let function = if let SymbolAlias::Function(target) = &target {
+                            Some(target.clone())
+                        } else {
+                            None
+                        };
+                        self.symbol_aliases.insert(name, target);
+                        Statement::Noop(function)
+                    }
+                } else if self.peek() == &Token::Symbol('(') {
                     Statement::Call(self.arguments(name, position)?)
                 } else if self.take(Token::Symbol('.')) {
                     let slot = self.variable(&name, true, position)?;
                     let member_position = self.position();
                     let member = self.name()?;
-                    if member == "clamp" {
+                    if member == "disconect" || member == "disconnect" {
+                        let binding = self.bindings.get(&name).unwrap();
+                        if !binding.alias {
+                            return Err(
+                                position.error(format!("variable '{name}' is not an alias"))
+                            );
+                        }
+                        let old_slot = binding.slot;
+                        let new_slot = self.types.len();
+                        self.types.push(None);
+                        self.declarations.push((name.clone(), position));
+                        self.bindings.insert(
+                            name,
+                            Binding {
+                                slot: new_slot,
+                                initialized: true,
+                                changeable: true,
+                                alias: false,
+                            },
+                        );
+                        Statement::Disconnect(new_slot, old_slot)
+                    } else if member == "clamp" {
                         self.writable_variable(&name, position)?;
                         self.symbol('(')?;
                         let low = self.expression(0)?;
@@ -842,6 +1006,7 @@ impl Parser {
         self.declarations.clear();
         self.result_name = None;
         self.loop_depth = 0;
+        self.symbol_aliases.clear();
         let function_position = self.position();
         if let Some((_, id)) = &owner {
             self.bind(
@@ -1089,6 +1254,7 @@ pub fn parse(source: &str) -> Result<Program, String> {
         enums: HashMap::new(),
         classes: HashMap::new(),
         loop_depth: 0,
+        symbol_aliases: HashMap::new(),
     };
     let mut functions = Vec::new();
     let mut signatures = HashMap::new();
@@ -1160,6 +1326,12 @@ pub fn parse(source: &str) -> Result<Program, String> {
             Statement::Assign(_, expr) | Statement::Print(expr, _) => {
                 validate_expr(expr, signatures)?
             }
+            Statement::Noop(Some(function)) => {
+                if !signatures.contains_key(function) {
+                    return Err(format!("function '{function}' is not declared"));
+                }
+            }
+            Statement::Disconnect(_, _) | Statement::Noop(None) => (),
             Statement::Clamp(_, low, high) => {
                 validate_expr(low, signatures)?;
                 validate_expr(high, signatures)?;

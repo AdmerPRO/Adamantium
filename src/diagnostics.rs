@@ -19,9 +19,14 @@ pub fn warnings(program: &Program) -> Vec<String> {
                 continue;
             }
             match statement {
+                Statement::Noop(_) => (),
                 Statement::Assign(slot, expr) => {
                     declared.insert(*slot);
                     visit(expr, &mut reads, &mut calls);
+                }
+                Statement::Disconnect(destination, source) => {
+                    declared.insert(*destination);
+                    reads.insert(*source);
                 }
                 Statement::Clamp(slot, low, high) => {
                     reads.insert(*slot);
@@ -167,9 +172,14 @@ fn visit_statement(
     calls: &mut HashSet<String>,
 ) {
     match statement {
+        Statement::Noop(_) => (),
         Statement::Assign(slot, expr) => {
             declared.insert(*slot);
             visit(expr, reads, calls);
+        }
+        Statement::Disconnect(destination, source) => {
+            declared.insert(*destination);
+            reads.insert(*source);
         }
         Statement::Clamp(slot, low, high) => {
             reads.insert(*slot);

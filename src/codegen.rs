@@ -219,10 +219,15 @@ impl Generator {
         for instruction in instructions {
             let mark = self.next_slot;
             match instruction {
+                Instruction::Noop => (),
                 Instruction::Assign(slot, value) => {
                     self.expression(value);
                     self.clone_class(value.ty);
                     self.store(*slot);
+                }
+                Instruction::Disconnect(destination, source) => {
+                    self.load(*source);
+                    self.store(*destination);
                 }
                 Instruction::Clamp(slot, low, high) => {
                     self.expression(low);

@@ -191,7 +191,7 @@ through `self` inside the same class. Class values use copy semantics, including
 assignments and ordinary function arguments. Methods modify their receiver.
 All fields are currently required, direct printing of an object is unsupported,
 and class-typed fields are reserved until independent deep copies are implemented.
-Lifecycle hooks other than `__new__` and `as_var()` references are not supported.
+Lifecycle hooks other than `__new__` are not supported.
 
 ### Comments
 
@@ -227,6 +227,37 @@ call. Passing its value to a function does not make the parameter immutable.
 one of these modifiers.
 `variable` is an exact alias of `var`, and `changeable` is an exact alias of `ch`.
 Both forms work with type suffixes, `static`, and `stc`.
+
+### Variable and symbol aliases
+
+`as_variable` creates an alias. For ordinary values, both names share the same
+storage until the alias is disconnected:
+
+```text
+var a = 10;
+var b = a.as_variable;
+a = 20;          // b is now 20.
+b = 15;          // a is now 15.
+b.disconect;     // `disconnect` is also accepted.
+a = 25;          // b remains 15.
+```
+
+Scalar aliases may be disconnected. Enum and class value aliases cannot be
+disconnected. Functions, enum types, and class types can also be aliased as
+symbols. A symbol alias may be redirected to another symbol, even one of a
+different kind or function signature, but it cannot be disconnected.
+
+```text
+var operation = add().as_variable;
+print.newline(operation(2,3));
+operation = twice().as_variable;
+print.newline(operation(6));
+
+var StatusAlias = Status.as_variable;
+var state = StatusAlias.ready;
+var CounterAlias = Counter.as_variable;
+var counter = CounterAlias(value=1,step=2);
+```
 
 ### Arithmetic and assignment
 

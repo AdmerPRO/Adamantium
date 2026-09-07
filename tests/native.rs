@@ -11,6 +11,41 @@ static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_value_and_function_aliases() {
+    let output = Project::new(
+        r#"
+        fun main() {
+            var a = 10;
+            var b = a.as_variable;
+            a = 20;
+            print.newline(b);
+            b = 15;
+            print.newline(a);
+            b.disconect;
+            a = 25;
+            print.newline(a);
+            print.newline(b);
+            var operation = add().as_variable;
+            print.newline(operation(2,3));
+            operation = twice().as_variable;
+            print.newline(operation(6));
+        }
+        fun add(a:int,b:int) r:int { r=a+b; }
+        fun twice(value:int) r:int { r=value*2; }
+    "#,
+    )
+    .run();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"20\r\n15\r\n25\r\n15\r\n5\r\n12\r\n");
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_match_selects_the_first_matching_branch() {
     let output = Project::new(
         r#"

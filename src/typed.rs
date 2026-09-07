@@ -25,7 +25,9 @@ pub enum Kind {
     MethodCall(String, Box<Expression>, Vec<Expression>),
 }
 pub enum Instruction {
+    Noop,
     Assign(usize, Expression),
+    Disconnect(usize, usize),
     Clamp(usize, Expression, Expression),
     Print(Expression, bool),
     Call(Expression),
@@ -427,10 +429,19 @@ impl Checker<'_> {
     }
     fn statement(&mut self, statement: &Statement) -> Result<Instruction, String> {
         Ok(match statement {
+            Statement::Noop(_) => Instruction::Noop,
             Statement::Assign(slot, expr) => {
                 let value = self.expression(expr, self.types[*slot])?;
                 self.types[*slot] = Some(value.ty);
                 Instruction::Assign(*slot, value)
+            }
+            Statement::Disconnect(destination, source) => {
+                let ty = self.types[*source].ok_or("unknown alias type")?;
+                if matches!(ty, Type::Enum(_) | Type::Class(_)) {
+                    return Err(format!("disconect is not supported for {ty} aliases"));
+                }
+                self.types[*destination] = Some(ty);
+                Instruction::Disconnect(*destination, *source)
             }
             Statement::Clamp(slot, low, high) => {
                 let ty = self.types[*slot].ok_or("unknown variable type")?;

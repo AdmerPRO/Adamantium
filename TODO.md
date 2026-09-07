@@ -672,12 +672,14 @@ print.sameline("Hello ");
 Implement:
 
 ```adamantium
-var a = b.as_var();
+var a = b.as_variable;
 ```
 
-* [ ] Implement variable aliases
-* [ ] Ensure aliases do not copy values
-* [ ] Implement alias chains
+* [x] Implement variable aliases with `as_variable`
+* [x] Ensure connected aliases share values instead of copying
+* [x] Implement alias chains through shared storage
+* [x] Implement function, enum and class symbol aliases
+* [x] Allow symbol aliases to be redirected to another symbol
 * [ ] Implement `get_parent()`
 * [ ] Implement `get_root()`
 * [ ] Implement `is_alias()`
@@ -687,7 +689,8 @@ var a = b.as_var();
 * [ ] Implement `desync()`
 * [ ] Implement `change_only()`
 * [ ] Implement `sync()`
-* [ ] Implement `detach()`
+* [x] Implement `disconect` and `disconnect` for scalar value aliases
+* [ ] Implement `detach()` as a separate API
 * [ ] Implement `reattach()`
 * [ ] Define alias lifetime rules
 * [ ] Prevent alias use-after-lifetime
@@ -1120,7 +1123,7 @@ Adamantium must remain memory-safe.
 * [x] Generate classes — runtime-backed field storage, method calls and independent copies
 * [ ] Generate lists
 * [x] Generate strings — read-only UTF-8 storage with pointer/length values
-* [ ] Generate aliases
+* [x] Generate scalar aliases and disconnection copies
 * [ ] Generate async support
 * [x] Generate runtime calls
 * [ ] Add optimization passes
