@@ -83,28 +83,3 @@ jobs:
 
       - name: Build release
         run: cargo build --locked --release
-
-      - name: Test installed CLI on Windows x86-64
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          rustc --version --verbose
-          if ((rustc --version --verbose) -notmatch 'host: x86_64-pc-windows-msvc') {
-            throw 'The Windows CLI test must run on x86-64 MSVC.'
-          }
-
-          $installRoot = Join-Path $env:RUNNER_TEMP 'adamantium-cli'
-          cargo install --path . --locked --force --root $installRoot
-          $adamantium = Join-Path $installRoot 'bin/adamantium.exe'
-
-          & $adamantium --version
-          if ($LASTEXITCODE -ne 0) { throw 'adamantium --version failed.' }
-
-          & $adamantium --help
-          if ($LASTEXITCODE -ne 0) { throw 'adamantium --help failed.' }
-
-          & $adamantium build example-project
-          if ($LASTEXITCODE -ne 0) { throw 'adamantium build failed.' }
-
-          & $adamantium run example-project
-          if ($LASTEXITCODE -ne 0) { throw 'adamantium run failed.' }

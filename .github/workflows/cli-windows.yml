@@ -1,0 +1,69 @@
+name: Windows CLI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test-cli:
+    name: Test CLI (Windows x86-64)
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install NASM
+        run: choco install nasm --yes --no-progress
+
+      - name: Configure Windows x64 linker
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Verify Rust host
+        shell: pwsh
+        run: |
+          $rustcInfo = (rustc --version --verbose) -join "`n"
+          Write-Output $rustcInfo
+          if ($rustcInfo -notmatch '(?m)^host: x86_64-pc-windows-msvc$') {
+            throw 'The Windows CLI test must run on x86-64 MSVC.'
+          }
+
+      - name: Install Adamantium CLI
+        shell: pwsh
+        run: |
+          $installRoot = Join-Path $env:RUNNER_TEMP 'adamantium-cli'
+          cargo install --path . --locked --force --root $installRoot
+          Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $installRoot 'bin')
+
+      - name: Test CLI commands
+        shell: pwsh
+        run: |
+          adamantium --version
+          if ($LASTEXITCODE -ne 0) { throw 'adamantium --version failed.' }
+
+          adamantium --help
+          if ($LASTEXITCODE -ne 0) { throw 'adamantium --help failed.' }
+
+          adamantium build example-project
+          if ($LASTEXITCODE -ne 0) { throw 'adamantium build failed.' }
+
+          adamantium run example-project
+          if ($LASTEXITCODE -ne 0) { throw 'adamantium run failed.' }
