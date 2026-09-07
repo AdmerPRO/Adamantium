@@ -288,7 +288,27 @@ fn logical_remainder_and_optional_values_are_typed() {
         "fun main() { var bad = 1.5 % 1.0; }",
         "fun main() { required(); } fun required($a:int,b:int) r:None {}",
         "fun main() { panic(123); }",
+        "fun main() { optional(1,2); } fun optional($value:int) r:None {}",
+        "fun main() {} fun bad($optional:int,required:int) r:None {}",
+        "class Bad(&value:string) { fun __new__() {} } fun main() {}",
+        "class Required(value:int) { fun __new__() {} } fun main() { var value=Required(); }",
     ] {
         assert!(checked(source).is_err(), "accepted {source}");
     }
+
+    assert!(
+        checked(
+            r#"
+        class C(pub &value:int) {
+            fun __new__() {}
+            pub fun report($fallback:int) result:None {
+                print.newline(self.value);
+                print.newline(fallback);
+            }
+        }
+        fun main() { var c=C(); c.report(); c.report(0); }
+    "#
+        )
+        .is_ok()
+    );
 }

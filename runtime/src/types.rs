@@ -408,3 +408,37 @@ pub fn display(value: Value, ty: Type) -> Result<String, String> {
         _ => return Err("string values must be written as UTF-8 bytes".into()),
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn integer_remainder_handles_signs_and_zero() {
+        let value = |number| integer(number, Type::I32).unwrap();
+        assert_eq!(
+            operation(13, Type::I32, value(17), value(5), Value::default())
+                .unwrap()
+                .integer(Type::I32),
+            2
+        );
+        assert_eq!(
+            operation(13, Type::I32, value(-17), value(5), Value::default())
+                .unwrap()
+                .integer(Type::I32),
+            -2
+        );
+        assert!(operation(13, Type::I32, value(1), value(0), Value::default()).is_err());
+    }
+
+    #[test]
+    fn optional_values_distinguish_none_from_zero() {
+        let optional = Type::Optional(Type::I32.id());
+        assert_eq!(Type::from_id(optional.id()), Some(optional));
+        let none = convert(Value::default(), Type::None, optional).unwrap();
+        let zero = convert(integer(0, Type::I32).unwrap(), Type::I32, optional).unwrap();
+        assert_ne!(none, zero);
+        assert_eq!(display(none, optional).unwrap(), "None");
+        assert_eq!(display(zero, optional).unwrap(), "0");
+    }
+}

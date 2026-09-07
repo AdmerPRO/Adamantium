@@ -70,6 +70,54 @@ fn native_panic_reports_source_line_and_stops() {
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_optional_enums_methods_and_matching() {
+    let output = Project::new(
+        r#"
+        enum Choice { first, second }
+        class Reporter(pub &value:int) {
+            fun __new__() {}
+            pub fun report($fallback:int) result:None {
+                print.newline(self.value);
+                print.newline(fallback);
+            }
+        }
+        fun main() {
+            print.newline(true or false and false);
+            print.newline((true or false) and false);
+            classify(); classify(0); classify(4);
+            show_choice(); show_choice(Choice.second);
+            var reporter=Reporter();
+            reporter.report();
+            reporter.report(0);
+            var message="variable warning";
+            warn(message);
+        }
+        fun classify($value:int) result:None {
+            match value {
+                None => { print.newline("none"); }
+                0 => { print.newline("zero"); }
+                _ => { print.newline("other"); }
+            }
+        }
+        fun show_choice($value:Choice) result:None { print.newline(value); }
+    "#,
+    )
+    .run();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.stdout,
+        b"true\r\nfalse\r\nnone\r\nzero\r\nother\r\nNone\r\n1\r\nNone\r\nNone\r\nNone\r\n0\r\n"
+    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("variable warning"));
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_value_and_function_aliases() {
     let output = Project::new(
         r#"
