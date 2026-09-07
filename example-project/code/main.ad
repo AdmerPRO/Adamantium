@@ -107,6 +107,31 @@ fun main() {
     print.newline(arithmetic);
     print.newline(explicit_changeable);
 
+    // Comparisons produce bool values. A for range excludes its upper bound.
+    if arithmetic >= 10 then {
+        print.newline("The if branch ran.");
+    } else {
+        print.newline("The else branch ran.");
+    }
+    var while_value = 0;
+    while while_value < 2 {
+        print.newline(while_value);
+        while_value =+ 1;
+    }
+    until while_value >= 4 {
+        print.newline(while_value);
+        while_value =+ 1;
+    }
+    for index in 0..3 {
+        print.newline(index);
+    }
+    loop {
+        while_value =+ 1;
+        if while_value == 5 then { continue; }
+        print.newline(while_value);
+        if while_value >= 6 then { break; }
+    }
+
     // clamp changes the current value once and uses inclusive bounds.
     var limited = 150;
     limited.clamp(0,100);

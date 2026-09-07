@@ -227,6 +227,21 @@ fn floating<F: Float>(op: u32, a: Value, b: Value, c: Value) -> Result<Value, St
         F::from_bits(b.bits()),
         F::from_bits(c.bits()),
     );
+    if (7..=12).contains(&op) {
+        let result = match op {
+            7 => a == b,
+            8 => a != b,
+            9 => a < b,
+            10 => a <= b,
+            11 => a > b,
+            12 => a >= b,
+            _ => unreachable!(),
+        };
+        return Ok(Value {
+            lo: result as u64,
+            hi: 0,
+        });
+    }
     let result = match op {
         0 => a + b,
         1 => a - b,
@@ -262,6 +277,21 @@ fn floating<F: Float>(op: u32, a: Value, b: Value, c: Value) -> Result<Value, St
 pub fn operation(op: u32, ty: Type, a: Value, b: Value, c: Value) -> Result<Value, String> {
     if ty.integer() {
         let (a, b, c) = (a.integer(ty), b.integer(ty), c.integer(ty));
+        if (7..=12).contains(&op) {
+            let result = match op {
+                7 => a == b,
+                8 => a != b,
+                9 => a < b,
+                10 => a <= b,
+                11 => a > b,
+                12 => a >= b,
+                _ => unreachable!(),
+            };
+            return Ok(Value {
+                lo: result as u64,
+                hi: 0,
+            });
+        }
         let value = match op {
             0 => a.checked_add(b),
             1 => a.checked_sub(b),
@@ -273,6 +303,12 @@ pub fn operation(op: u32, ty: Type, a: Value, b: Value, c: Value) -> Result<Valu
         }
         .ok_or("arithmetic overflow, division by zero or invalid clamp range")?;
         return integer(value, ty);
+    }
+    if matches!(ty, Type::Bool | Type::None | Type::Enum(_)) && matches!(op, 7 | 8) {
+        return Ok(Value {
+            lo: (if op == 7 { a == b } else { a != b }) as u64,
+            hi: 0,
+        });
     }
     match ty {
         Type::F32 => floating::<Single>(op, a, b, c),

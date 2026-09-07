@@ -96,15 +96,15 @@ Executable
 
 * [x] Implement statements
 * [x] Implement expressions — typed numeric arithmetic and function calls
-* [x] Implement blocks — function bodies only
+* [x] Implement blocks — function and control-flow bodies
 * [x] Implement semicolons
 * [x] Implement identifiers
 * [x] Implement literals — integers, floats, strings, booleans, and `None`
 * [x] Implement function calls
-* [x] Implement operators — numeric `+`, `-`, `*`, `/` and compound assignments
+* [x] Implement operators — numeric `+`, `-`, `*`, `/`, comparisons and compound assignments
 * [x] Implement operator precedence
 * [x] Implement parentheses
-* [x] Implement `{ }` blocks — function bodies only
+* [x] Implement `{ }` blocks — function and control-flow bodies
 
 ---
 
@@ -492,7 +492,7 @@ enum Direction {
 * [x] Implement enum declarations
 * [x] Implement enum variants
 * [x] Implement enum values — assignment, function arguments/results and numeric-index printing
-* [ ] Implement enum comparison
+* [x] Implement enum comparison — `==` and `!=`
 * [ ] Implement enum matching
 * [ ] Implement public enums
 * [ ] Prevent access to private enums from other modules
@@ -503,10 +503,10 @@ enum Direction {
 
 ## `if`
 
-* [ ] Implement `if`
-* [ ] Implement `then`
-* [ ] Implement `else`
-* [ ] Implement nested conditions
+* [x] Implement `if`
+* [x] Implement `then`
+* [x] Implement `else`
+* [x] Implement nested conditions
 
 Example:
 
@@ -545,8 +545,8 @@ for i in 0..10 {
 }
 ```
 
-* [ ] Implement `for`
-* [ ] Implement ranges
+* [x] Implement `for`
+* [x] Implement exclusive integer ranges
 * [ ] Implement iteration over lists
 * [ ] Implement iteration over supported collections
 
@@ -558,7 +558,17 @@ while hp > 0 {
 }
 ```
 
-* [ ] Implement `while`
+* [x] Implement `while`
+
+## `until`
+
+```adamantium
+until ready == true {
+    ...
+}
+```
+
+* [x] Implement `until` — repeat while the condition is false
 
 ## `loop`
 
@@ -568,13 +578,13 @@ loop {
 }
 ```
 
-* [ ] Implement infinite loops
+* [x] Implement infinite loops
 
 ## Loop control
 
-* [ ] Implement `break`
-* [ ] Implement `continue`
-* [ ] Validate loop-only statements
+* [x] Implement `break`
+* [x] Implement `continue`
+* [x] Validate loop-only statements
 
 ---
 

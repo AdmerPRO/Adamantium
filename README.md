@@ -250,6 +250,40 @@ Compound operators are written together: `b =- 5;` subtracts 5, whereas
 `b = -5;` assigns -5. Their right-hand side can be a full expression.
 All calculations and function calls execute in the generated EXE.
 
+### Conditions and loops
+
+Comparisons use `==`, `!=`, `<`, `<=`, `>`, and `>=`. Conditions must have the
+`bool` type. `if` uses the `then` keyword, and `else` is optional:
+
+```text
+if score >= 100 then {
+    print.newline("Complete");
+} else {
+    print.newline("Keep going");
+}
+```
+
+Adamantium supports `while`, `until`, exclusive integer `for` ranges, and
+infinite `loop` blocks. `until` executes its body while its condition is false.
+Both `break` and `continue` may be used inside any loop.
+
+```text
+var value = 0;
+while value < 2 {
+    value =+ 1;
+}
+until value >= 4 {
+    value =+ 1;
+}
+for index in 0..10 {
+    print.newline(index); // Prints 0 through 9.
+}
+loop {
+    if value == 4 then { break; }
+    continue;
+}
+```
+
 ### Clamp
 
 ```text

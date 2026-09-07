@@ -1,6 +1,8 @@
 # Adamantium Feature Example
 
 This project demonstrates every currently supported Adamantium language feature.
+This includes comparisons, `if`/`else`, `for`, `while`, `until`, `loop`,
+`break`, and `continue`.
 Run it from the compiler repository on Windows with NASM and the Visual Studio
 C++ build tools installed:
 

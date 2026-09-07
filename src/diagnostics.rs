@@ -35,6 +35,32 @@ pub fn warnings(program: &Program) -> Vec<String> {
                     visit(value, &mut reads, &mut calls);
                 }
                 Statement::MethodCall(expr) => visit(expr, &mut reads, &mut calls),
+                Statement::If(condition, yes, no) => {
+                    visit(condition, &mut reads, &mut calls);
+                    for statement in yes.iter().chain(no) {
+                        visit_statement(statement, &mut declared, &mut reads, &mut calls);
+                    }
+                }
+                Statement::While(condition, body) | Statement::Until(condition, body) => {
+                    visit(condition, &mut reads, &mut calls);
+                    for statement in body {
+                        visit_statement(statement, &mut declared, &mut reads, &mut calls);
+                    }
+                }
+                Statement::Loop(body) => {
+                    for statement in body {
+                        visit_statement(statement, &mut declared, &mut reads, &mut calls);
+                    }
+                }
+                Statement::For(slot, start, end, body) => {
+                    declared.insert(*slot);
+                    visit(start, &mut reads, &mut calls);
+                    visit(end, &mut reads, &mut calls);
+                    for statement in body {
+                        visit_statement(statement, &mut declared, &mut reads, &mut calls);
+                    }
+                }
+                Statement::Break | Statement::Continue => (),
                 Statement::Return => returned = true,
             }
         }
@@ -98,7 +124,7 @@ fn visit(expr: &Expr, reads: &mut HashSet<usize>, calls: &mut HashSet<String>) {
             reads.insert(*slot);
         }
         Expr::Call(call) => visit_call(call, reads, calls),
-        Expr::Binary(_, a, b) => {
+        Expr::Binary(_, a, b) | Expr::Compare(_, a, b) => {
             visit(a, reads, calls);
             visit(b, reads, calls);
         }
@@ -118,6 +144,56 @@ fn visit(expr: &Expr, reads: &mut HashSet<usize>, calls: &mut HashSet<String>) {
             }
         }
         _ => (),
+    }
+}
+fn visit_statement(
+    statement: &Statement,
+    declared: &mut HashSet<usize>,
+    reads: &mut HashSet<usize>,
+    calls: &mut HashSet<String>,
+) {
+    match statement {
+        Statement::Assign(slot, expr) => {
+            declared.insert(*slot);
+            visit(expr, reads, calls);
+        }
+        Statement::Clamp(slot, low, high) => {
+            reads.insert(*slot);
+            visit(low, reads, calls);
+            visit(high, reads, calls);
+        }
+        Statement::Print(expr, _) | Statement::MethodCall(expr) => visit(expr, reads, calls),
+        Statement::Call(call) => visit_call(call, reads, calls),
+        Statement::SetField(object, _, value) => {
+            visit(object, reads, calls);
+            visit(value, reads, calls);
+        }
+        Statement::If(condition, yes, no) => {
+            visit(condition, reads, calls);
+            for s in yes.iter().chain(no) {
+                visit_statement(s, declared, reads, calls);
+            }
+        }
+        Statement::While(condition, body) | Statement::Until(condition, body) => {
+            visit(condition, reads, calls);
+            for s in body {
+                visit_statement(s, declared, reads, calls);
+            }
+        }
+        Statement::Loop(body) => {
+            for s in body {
+                visit_statement(s, declared, reads, calls);
+            }
+        }
+        Statement::For(slot, start, end, body) => {
+            declared.insert(*slot);
+            visit(start, reads, calls);
+            visit(end, reads, calls);
+            for s in body {
+                visit_statement(s, declared, reads, calls);
+            }
+        }
+        Statement::Break | Statement::Continue | Statement::Return => (),
     }
 }
 fn visit_call(call: &Call, reads: &mut HashSet<usize>, calls: &mut HashSet<String>) {

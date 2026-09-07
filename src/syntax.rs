@@ -32,6 +32,15 @@ pub enum Operator {
     Multiply,
     Divide,
 }
+#[derive(Clone, Copy, Debug)]
+pub enum Comparison {
+    Equal,
+    NotEqual,
+    Less,
+    LessEqual,
+    Greater,
+    GreaterEqual,
+}
 impl Operator {
     fn from_char(c: char) -> Option<Self> {
         match c {
@@ -60,6 +69,7 @@ pub enum Expr {
     Negate(Box<Expr>),
     Positive(Box<Expr>),
     Binary(Operator, Box<Expr>, Box<Expr>),
+    Compare(Comparison, Box<Expr>, Box<Expr>),
     Call(Call),
 }
 #[derive(Debug)]
@@ -76,6 +86,13 @@ pub enum Statement {
     Call(Call),
     SetField(Expr, String, Expr),
     MethodCall(Expr),
+    If(Expr, Vec<Statement>, Vec<Statement>),
+    While(Expr, Vec<Statement>),
+    Until(Expr, Vec<Statement>),
+    Loop(Vec<Statement>),
+    For(usize, Expr, Expr, Vec<Statement>),
+    Break,
+    Continue,
     Return,
 }
 #[derive(Debug)]
@@ -132,6 +149,7 @@ struct Parser {
     declarations: Vec<(String, Position)>,
     enums: HashMap<String, EnumDefinition>,
     classes: HashMap<String, ClassDefinition>,
+    loop_depth: usize,
 }
 
 fn lex(source: &str) -> Result<Vec<(Token, Position)>, String> {
@@ -248,7 +266,7 @@ fn lex(source: &str) -> Result<Vec<(Token, Position)>, String> {
                 }
             }
             Token::String(value)
-        } else if "(){}.;=,:+-*/[]".contains(c) {
+        } else if "(){}.;=,:+-*/[]!<>".contains(c) {
             Token::Symbol(c)
         } else {
             return Err(position.error(format!("unexpected character {c:?}")));
@@ -320,6 +338,16 @@ impl Parser {
                     "use",
                     "pack",
                     "pub",
+                    "if",
+                    "then",
+                    "else",
+                    "for",
+                    "in",
+                    "while",
+                    "until",
+                    "loop",
+                    "break",
+                    "continue",
                 ]
                 .contains(&name.as_str())
                     && Type::parse(&name).is_none() =>
@@ -490,7 +518,13 @@ impl Parser {
         self.expression_tail(left, min_precedence)
     }
     fn expression_tail(&mut self, mut left: Expr, min_precedence: u8) -> Result<Expr, String> {
-        while self.take(Token::Symbol('.')) {
+        while self.peek() == &Token::Symbol('.')
+            && self
+                .tokens
+                .get(self.cursor + 1)
+                .is_some_and(|(token, _)| token != &Token::Symbol('.'))
+        {
+            self.next();
             let position = self.position();
             let member = self.name()?;
             if self.take(Token::Symbol('(')) {
@@ -533,6 +567,36 @@ impl Parser {
             let right = self.expression(precedence + 1)?;
             left = Expr::Binary(operator, Box::new(left), Box::new(right));
         }
+        if min_precedence == 0 {
+            let comparison = match (self.peek(), self.tokens.get(self.cursor + 1).map(|x| &x.0)) {
+                (Token::Symbol('='), Some(Token::Symbol('='))) => Some((Comparison::Equal, true)),
+                (Token::Symbol('!'), Some(Token::Symbol('='))) => {
+                    Some((Comparison::NotEqual, true))
+                }
+                (Token::Symbol('<'), Some(Token::Symbol('='))) => {
+                    Some((Comparison::LessEqual, true))
+                }
+                (Token::Symbol('>'), Some(Token::Symbol('='))) => {
+                    Some((Comparison::GreaterEqual, true))
+                }
+                (Token::Symbol('<'), _) => Some((Comparison::Less, false)),
+                (Token::Symbol('>'), _) => Some((Comparison::Greater, false)),
+                _ => None,
+            };
+            if let Some((comparison, two_symbols)) = comparison {
+                self.next();
+                if two_symbols {
+                    self.next();
+                }
+                let right = self.expression(1)?;
+                left = Expr::Compare(comparison, Box::new(left), Box::new(right));
+                if matches!(self.peek(), Token::Symbol('=' | '!' | '<' | '>')) {
+                    return Err(self
+                        .position()
+                        .error("chained comparisons are not supported"));
+                }
+            }
+        }
         if min_precedence == 0 && self.take(Token::Symbol(':')) {
             left = Expr::Annotated(Box::new(left), self.type_name()?);
         }
@@ -557,7 +621,22 @@ impl Parser {
     fn statement(&mut self) -> Result<Statement, String> {
         self.reject_import()?;
         let position = self.position();
+        if let Token::Word(keyword) = self.peek()
+            && matches!(keyword.as_str(), "if" | "while" | "until" | "loop" | "for")
+        {
+            return self.control_statement();
+        }
         let statement = match self.next() {
+            Token::Word(word) if word == "break" || word == "continue" => {
+                if self.loop_depth == 0 {
+                    return Err(position.error(format!("'{word}' can only be used inside a loop")));
+                }
+                if word == "break" {
+                    Statement::Break
+                } else {
+                    Statement::Continue
+                }
+            }
             Token::Word(word) if word == "var" || word == "variable" => {
                 let changeable = if self.take(Token::Word("static".into()))
                     || self.take(Token::Word("stc".into()))
@@ -665,6 +744,57 @@ impl Parser {
         self.symbol(';')?;
         Ok(statement)
     }
+    fn block(&mut self) -> Result<Vec<Statement>, String> {
+        self.symbol('{')?;
+        let mut statements = Vec::new();
+        while !self.take(Token::Symbol('}')) {
+            if self.peek() == &Token::End {
+                return Err(self.position().error("expected '}' before end of file"));
+            }
+            statements.push(self.statement()?);
+        }
+        Ok(statements)
+    }
+    fn loop_block(&mut self) -> Result<Vec<Statement>, String> {
+        self.loop_depth += 1;
+        let result = self.block();
+        self.loop_depth -= 1;
+        result
+    }
+    fn control_statement(&mut self) -> Result<Statement, String> {
+        let position = self.position();
+        let Token::Word(keyword) = self.next() else {
+            unreachable!()
+        };
+        Ok(match keyword.as_str() {
+            "if" => {
+                let condition = self.expression(0)?;
+                self.word("then")?;
+                let yes = self.block()?;
+                let no = if self.take(Token::Word("else".into())) {
+                    self.block()?
+                } else {
+                    Vec::new()
+                };
+                Statement::If(condition, yes, no)
+            }
+            "while" => Statement::While(self.expression(0)?, self.loop_block()?),
+            "until" => Statement::Until(self.expression(0)?, self.loop_block()?),
+            "loop" => Statement::Loop(self.loop_block()?),
+            "for" => {
+                let name_position = self.position();
+                let name = self.name()?;
+                self.word("in")?;
+                let start = self.expression(0)?;
+                self.symbol('.')?;
+                self.symbol('.')?;
+                let end = self.expression(0)?;
+                let slot = self.bind(name, true, false, None, name_position)?;
+                Statement::For(slot, start, end, self.loop_block()?)
+            }
+            _ => return Err(position.error("expected a control-flow statement")),
+        })
+    }
     fn function(&mut self) -> Result<Function, String> {
         self.function_owned(None)
     }
@@ -673,6 +803,7 @@ impl Parser {
         self.types.clear();
         self.declarations.clear();
         self.result_name = None;
+        self.loop_depth = 0;
         let function_position = self.position();
         if let Some((_, id)) = &owner {
             self.bind(
@@ -919,6 +1050,7 @@ pub fn parse(source: &str) -> Result<Program, String> {
         declarations: Vec::new(),
         enums: HashMap::new(),
         classes: HashMap::new(),
+        loop_depth: 0,
     };
     let mut functions = Vec::new();
     let mut signatures = HashMap::new();
@@ -982,24 +1114,55 @@ pub fn parse(source: &str) -> Result<Program, String> {
     if !signatures.contains_key("main") {
         return Err("1:1: program must declare fun main()".into());
     }
+    fn validate_statement(
+        statement: &Statement,
+        signatures: &HashMap<String, usize>,
+    ) -> Result<(), String> {
+        match statement {
+            Statement::Assign(_, expr) | Statement::Print(expr, _) => {
+                validate_expr(expr, signatures)?
+            }
+            Statement::Clamp(_, low, high) => {
+                validate_expr(low, signatures)?;
+                validate_expr(high, signatures)?;
+            }
+            Statement::Call(call) => validate_call(call, signatures)?,
+            Statement::SetField(object, _, value) => {
+                validate_expr(object, signatures)?;
+                validate_expr(value, signatures)?;
+            }
+            Statement::MethodCall(expr) => validate_expr(expr, signatures)?,
+            Statement::If(condition, yes, no) => {
+                validate_expr(condition, signatures)?;
+                for statement in yes.iter().chain(no) {
+                    validate_statement(statement, signatures)?;
+                }
+            }
+            Statement::While(condition, body) | Statement::Until(condition, body) => {
+                validate_expr(condition, signatures)?;
+                for statement in body {
+                    validate_statement(statement, signatures)?;
+                }
+            }
+            Statement::Loop(body) => {
+                for statement in body {
+                    validate_statement(statement, signatures)?;
+                }
+            }
+            Statement::For(_, start, end, body) => {
+                validate_expr(start, signatures)?;
+                validate_expr(end, signatures)?;
+                for statement in body {
+                    validate_statement(statement, signatures)?;
+                }
+            }
+            _ => (),
+        }
+        Ok(())
+    }
     for function in &functions {
         for statement in &function.statements {
-            match statement {
-                Statement::Assign(_, expr) | Statement::Print(expr, _) => {
-                    validate_expr(expr, &signatures)?
-                }
-                Statement::Clamp(_, low, high) => {
-                    validate_expr(low, &signatures)?;
-                    validate_expr(high, &signatures)?;
-                }
-                Statement::Call(call) => validate_call(call, &signatures)?,
-                Statement::SetField(object, _, value) => {
-                    validate_expr(object, &signatures)?;
-                    validate_expr(value, &signatures)?;
-                }
-                Statement::MethodCall(expr) => validate_expr(expr, &signatures)?,
-                _ => (),
-            }
+            validate_statement(statement, &signatures)?;
         }
     }
     let mut classes = parser.classes.into_values().collect::<Vec<_>>();
@@ -1009,7 +1172,7 @@ pub fn parse(source: &str) -> Result<Program, String> {
 fn validate_expr(expr: &Expr, signatures: &HashMap<String, usize>) -> Result<(), String> {
     match expr {
         Expr::Call(call) => validate_call(call, signatures),
-        Expr::Binary(_, left, right) => {
+        Expr::Binary(_, left, right) | Expr::Compare(_, left, right) => {
             validate_expr(left, signatures)?;
             validate_expr(right, signatures)
         }

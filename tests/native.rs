@@ -11,6 +11,39 @@ static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_conditions_and_loops() {
+    let output = Project::new(
+        r#"
+        fun main() {
+            var value = 0;
+            if value == 0 then { print.newline("if"); } else { print.newline("else"); }
+            while value < 2 { print.newline(value); value =+ 1; }
+            until value >= 4 { print.newline(value); value =+ 1; }
+            for i in 0..3 { print.newline(i); }
+            loop {
+                value =+ 1;
+                if value == 5 then { continue; }
+                print.newline(value);
+                if value >= 6 then { break; }
+            }
+        }
+    "#,
+    )
+    .run();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.stdout,
+        b"if\r\n0\r\n1\r\n2\r\n3\r\n0\r\n1\r\n2\r\n6\r\n"
+    );
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_classes_construct_mutate_and_copy_values() {
     let output = Project::new(
         r#"

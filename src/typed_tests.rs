@@ -192,3 +192,26 @@ fn floating_formats_round_and_preserve_quad_precision() {
     let double = types::convert(single, Type::F32, Type::F64).unwrap();
     assert_eq!(double.lo, (0.1_f32 as f64).to_bits());
 }
+
+#[test]
+fn checks_comparisons_conditions_and_integer_ranges() {
+    let program = checked(
+        r#"fun main() {
+        var a = 0;
+        if a < 2 then { a =+ 1; } else { a =- 1; }
+        while a != 3 { a =+ 1; }
+        until a >= 4 { a =+ 1; }
+        for i in 0:u8..3:u8 { print.newline(i); }
+        loop { break; }
+    }"#,
+    )
+    .unwrap();
+    assert_eq!(program.functions[0].types.last(), Some(&Type::U8));
+    for source in [
+        "fun main() { if 1 then {} }",
+        "fun main() { for i in 0.0..2.0 {} }",
+        "fun main() { var a = true < false; }",
+    ] {
+        assert!(checked(source).is_err(), "accepted {source}");
+    }
+}

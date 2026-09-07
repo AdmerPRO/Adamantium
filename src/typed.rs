@@ -3,7 +3,7 @@ use std::collections::HashMap;
 #[path = "typed_tests.rs"]
 mod tests;
 use crate::{
-    syntax::{self, ClassDefinition, Expr, Operator, Statement},
+    syntax::{self, ClassDefinition, Comparison, Expr, Operator, Statement},
     types::{self, Type, Value},
 };
 
@@ -17,6 +17,7 @@ pub enum Kind {
     Variable(usize),
     Negate(Box<Expression>),
     Binary(Operator, Box<Expression>, Box<Expression>),
+    Compare(Comparison, Box<Expression>, Box<Expression>),
     Convert(Box<Expression>),
     Call(String, Vec<Expression>),
     Construct(u32, Vec<Expression>, String),
@@ -29,6 +30,13 @@ pub enum Instruction {
     Print(Expression, bool),
     Call(Expression),
     SetField(Expression, usize, Expression),
+    If(Expression, Vec<Instruction>, Vec<Instruction>),
+    While(Expression, Vec<Instruction>),
+    Until(Expression, Vec<Instruction>),
+    Loop(Vec<Instruction>),
+    For(usize, Expression, Expression, Vec<Instruction>),
+    Break,
+    Continue,
     Return,
 }
 pub struct Function {
@@ -163,6 +171,7 @@ impl Checker<'_> {
                 (Some(a), Some(b)) => promoted(a, b).ok(),
                 (a, b) => a.or(b),
             },
+            Expr::Compare(_, _, _) => Some(Type::Bool),
             _ => None,
         }
     }
@@ -376,6 +385,34 @@ impl Checker<'_> {
                     ),
                 }
             }
+            Expr::Compare(comparison, a, b) => {
+                let (a, b) = if self.hint(a).is_some_and(Type::numeric)
+                    || self.hint(b).is_some_and(Type::numeric)
+                {
+                    let hint = match (self.hint(a), self.hint(b)) {
+                        (Some(a), Some(b)) => Some(promoted(a, b)?),
+                        (a, b) => a.or(b),
+                    };
+                    let a = self.expression(a, hint)?;
+                    let b = self.expression(b, hint)?;
+                    let ty = promoted(a.ty, b.ty)?;
+                    (self.convert(a, ty)?, self.convert(b, ty)?)
+                } else {
+                    let a = self.expression(a, None)?;
+                    let b = self.expression(b, Some(a.ty))?;
+                    if !matches!(comparison, Comparison::Equal | Comparison::NotEqual) {
+                        return Err(format!("ordering comparison is not supported for {}", a.ty));
+                    }
+                    if matches!(a.ty, Type::String | Type::Class(_)) {
+                        return Err(format!("comparison is not supported for {}", a.ty));
+                    }
+                    (a, b)
+                };
+                Expression {
+                    ty: Type::Bool,
+                    kind: Kind::Compare(*comparison, Box::new(a), Box::new(b)),
+                }
+            }
         };
         if let Some(ty) = expected {
             self.convert(result, ty)
@@ -441,6 +478,50 @@ impl Checker<'_> {
                 Instruction::SetField(object, index, self.expression(value, Some(field.ty))?)
             }
             Statement::MethodCall(expr) => Instruction::Call(self.expression(expr, None)?),
+            Statement::If(condition, yes, no) => Instruction::If(
+                self.expression(condition, Some(Type::Bool))?,
+                yes.iter()
+                    .map(|s| self.statement(s))
+                    .collect::<Result<_, _>>()?,
+                no.iter()
+                    .map(|s| self.statement(s))
+                    .collect::<Result<_, _>>()?,
+            ),
+            Statement::While(condition, body) => Instruction::While(
+                self.expression(condition, Some(Type::Bool))?,
+                body.iter()
+                    .map(|s| self.statement(s))
+                    .collect::<Result<_, _>>()?,
+            ),
+            Statement::Until(condition, body) => Instruction::Until(
+                self.expression(condition, Some(Type::Bool))?,
+                body.iter()
+                    .map(|s| self.statement(s))
+                    .collect::<Result<_, _>>()?,
+            ),
+            Statement::Loop(body) => Instruction::Loop(
+                body.iter()
+                    .map(|s| self.statement(s))
+                    .collect::<Result<_, _>>()?,
+            ),
+            Statement::For(slot, start, end, body) => {
+                let start = self.expression(start, self.types[*slot])?;
+                let end = self.expression(end, Some(start.ty))?;
+                if !start.ty.integer() {
+                    return Err("for range bounds must be integers".into());
+                }
+                self.types[*slot] = Some(start.ty);
+                Instruction::For(
+                    *slot,
+                    start,
+                    end,
+                    body.iter()
+                        .map(|s| self.statement(s))
+                        .collect::<Result<_, _>>()?,
+                )
+            }
+            Statement::Break => Instruction::Break,
+            Statement::Continue => Instruction::Continue,
         })
     }
 }

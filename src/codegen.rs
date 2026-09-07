@@ -1,5 +1,5 @@
 use crate::{
-    syntax::Operator,
+    syntax::{Comparison, Operator},
     typed::{Expression, Function, Instruction, Kind, Program},
     types::Type,
 };
@@ -10,11 +10,18 @@ struct Generator {
     next_slot: usize,
     max_slot: usize,
     class_sizes: Vec<usize>,
+    next_label: usize,
+    loop_stack: Vec<(String, String)>,
 }
 fn memory(slot: usize, offset: usize) -> String {
     format!("[rbp - {}]", (slot + 1) * 16 - offset)
 }
 impl Generator {
+    fn label(&mut self, prefix: &str) -> String {
+        let label = format!("ad_{prefix}_{}", self.next_label);
+        self.next_label += 1;
+        label
+    }
     fn emit(&mut self, text: impl AsRef<str>) {
         self.text.push_str(text.as_ref());
         self.text.push('\n');
@@ -189,21 +196,27 @@ impl Generator {
                 self.evaluate(op, expr.ty, expr.ty, &[left, right]);
                 self.next_slot = mark;
             }
+            Kind::Compare(comparison, a, b) => {
+                let mark = self.next_slot;
+                self.expression(a);
+                let left = self.save();
+                self.expression(b);
+                let right = self.save();
+                let operation = match comparison {
+                    Comparison::Equal => 7,
+                    Comparison::NotEqual => 8,
+                    Comparison::Less => 9,
+                    Comparison::LessEqual => 10,
+                    Comparison::Greater => 11,
+                    Comparison::GreaterEqual => 12,
+                };
+                self.evaluate(operation, a.ty, a.ty, &[left, right]);
+                self.next_slot = mark;
+            }
         }
     }
-    fn function(&mut self, function: &Function) {
-        self.next_slot = function.types.len();
-        self.max_slot = self.next_slot;
-        let start = self.text.len();
-        for slot in 0..function.parameters {
-            self.emit(format!(
-                "    mov rax, [rbp + {}]\n    mov rdx, [rbp + {}]",
-                16 + slot * 16,
-                24 + slot * 16
-            ));
-            self.store(slot);
-        }
-        for instruction in &function.instructions {
+    fn instructions(&mut self, instructions: &[Instruction], function: &Function) {
+        for instruction in instructions {
             let mark = self.next_slot;
             match instruction {
                 Instruction::Assign(slot, value) => {
@@ -245,10 +258,85 @@ impl Generator {
                         index * 16 + 8
                     ));
                 }
+                Instruction::If(condition, yes, no) => {
+                    let else_label = self.label("else");
+                    let end = self.label("if_end");
+                    self.expression(condition);
+                    self.emit(format!("    test rax, rax\n    jz {else_label}"));
+                    self.instructions(yes, function);
+                    self.emit(format!("    jmp {end}\n{else_label}:"));
+                    self.instructions(no, function);
+                    self.emit(format!("{end}:"));
+                }
+                Instruction::While(condition, body) | Instruction::Until(condition, body) => {
+                    let start = self.label("condition");
+                    let end = self.label("loop_end");
+                    self.loop_stack.push((start.clone(), end.clone()));
+                    self.emit(format!("{start}:"));
+                    self.expression(condition);
+                    let jump = if matches!(instruction, Instruction::While(_, _)) {
+                        "jz"
+                    } else {
+                        "jnz"
+                    };
+                    self.emit(format!("    test rax, rax\n    {jump} {end}"));
+                    self.instructions(body, function);
+                    self.emit(format!("    jmp {start}\n{end}:"));
+                    self.loop_stack.pop();
+                }
+                Instruction::Loop(body) => {
+                    let start = self.label("loop");
+                    let end = self.label("loop_end");
+                    self.loop_stack.push((start.clone(), end.clone()));
+                    self.emit(format!("{start}:"));
+                    self.instructions(body, function);
+                    self.emit(format!("    jmp {start}\n{end}:"));
+                    self.loop_stack.pop();
+                }
+                Instruction::For(slot, start_value, end_value, body) => {
+                    self.expression(start_value);
+                    self.store(*slot);
+                    self.expression(end_value);
+                    let end_slot = self.save();
+                    let condition = self.label("for_condition");
+                    let increment = self.label("for_increment");
+                    let end = self.label("loop_end");
+                    self.loop_stack.push((increment.clone(), end.clone()));
+                    self.emit(format!("{condition}:"));
+                    self.evaluate(9, start_value.ty, start_value.ty, &[*slot, end_slot]);
+                    self.emit(format!("    test rax, rax\n    jz {end}"));
+                    self.instructions(body, function);
+                    self.emit(format!("{increment}:\n    mov rax, 1\n    xor edx, edx"));
+                    let one = self.save();
+                    self.evaluate(0, start_value.ty, start_value.ty, &[*slot, one]);
+                    self.store(*slot);
+                    self.emit(format!("    jmp {condition}\n{end}:"));
+                    self.loop_stack.pop();
+                }
+                Instruction::Break => {
+                    self.emit(format!("    jmp {}", self.loop_stack.last().unwrap().1))
+                }
+                Instruction::Continue => {
+                    self.emit(format!("    jmp {}", self.loop_stack.last().unwrap().0))
+                }
                 Instruction::Return => self.emit(format!("    jmp ad_return_{}", function.name)),
             }
             self.next_slot = mark;
         }
+    }
+    fn function(&mut self, function: &Function) {
+        self.next_slot = function.types.len();
+        self.max_slot = self.next_slot;
+        let start = self.text.len();
+        for slot in 0..function.parameters {
+            self.emit(format!(
+                "    mov rax, [rbp + {}]\n    mov rdx, [rbp + {}]",
+                16 + slot * 16,
+                24 + slot * 16
+            ));
+            self.store(slot);
+        }
+        self.instructions(&function.instructions, function);
         self.emit(format!("ad_return_{}:", function.name));
         if let Some(slot) = function.result {
             self.load(slot);
@@ -285,6 +373,8 @@ pub fn assembly(program: &Program) -> String {
         next_slot: 0,
         max_slot: 0,
         class_sizes: program.class_sizes.clone(),
+        next_label: 0,
+        loop_stack: Vec::new(),
     };
     for function in &program.functions {
         generator.function(function);

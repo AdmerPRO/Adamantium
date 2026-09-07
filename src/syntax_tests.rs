@@ -351,3 +351,43 @@ fn rejects_invalid_programs_with_diagnostics() {
             .starts_with("2:2:")
     );
 }
+
+#[test]
+fn parses_conditions_and_all_loop_forms() {
+    let program = parse(
+        r#"fun main() {
+        var a = 0;
+        if a == 0 then { a =+ 1; } else { a =- 1; }
+        while a < 3 { a =+ 1; }
+        until a >= 5 { a =+ 1; }
+        for i in 0..3 { print.newline(i); }
+        loop { if a != 0 then { break; } continue; }
+    }"#,
+    )
+    .unwrap();
+    assert!(matches!(
+        program.functions[0].statements[1],
+        Statement::If(..)
+    ));
+    assert!(matches!(
+        program.functions[0].statements[2],
+        Statement::While(..)
+    ));
+    assert!(matches!(
+        program.functions[0].statements[3],
+        Statement::Until(..)
+    ));
+    assert!(matches!(
+        program.functions[0].statements[4],
+        Statement::For(..)
+    ));
+    assert!(matches!(
+        program.functions[0].statements[5],
+        Statement::Loop(..)
+    ));
+    assert!(
+        parse("fun main() { break; }")
+            .unwrap_err()
+            .contains("inside a loop")
+    );
+}
