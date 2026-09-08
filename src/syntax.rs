@@ -1157,10 +1157,6 @@ impl Parser {
                 self.symbol(':')?;
                 let mut ty = self.type_name()?;
                 if optional {
-                    if matches!(ty, Type::String | Type::F128 | Type::Class(_)) {
-                        return Err(position
-                            .error(format!("optional {ty} parameters are not supported yet")));
-                    }
                     ty = Type::Optional(ty.id());
                 }
                 self.bind(parameter, true, true, Some(ty), position)?;
@@ -1305,16 +1301,12 @@ impl Parser {
                 let field = self.name()?;
                 self.symbol(':')?;
                 let mut ty = self.type_name()?;
-                if matches!(ty, Type::Class(_)) {
+                if matches!(ty, Type::Class(_)) && !optional {
                     return Err(field_position.error(
                         "class-typed fields are not supported yet because class copies must be independent",
                     ));
                 }
                 if optional {
-                    if matches!(ty, Type::String | Type::F128 | Type::Class(_)) {
-                        return Err(field_position
-                            .error(format!("optional {ty} fields are not supported yet")));
-                    }
                     ty = Type::Optional(ty.id());
                 }
                 if fields.iter().any(|value: &ClassField| value.name == field) {

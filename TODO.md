@@ -303,14 +303,14 @@ or:
 true
 ```
 
-* [x] Implement `$name:Type` optional function parameters for supported compact values
-* [x] Implement `&name:Type` optional class fields for supported compact values
+* [x] Implement `$name:Type` optional function parameters for all current value types
+* [x] Implement `&name:Type` optional class fields for all current value types
 * [x] Allow omitted optional class fields
 * [x] Allow optional function parameters
 * [x] Represent missing values as `None`
 * [x] Add optional-value type checking
 * [x] Prevent arithmetic and other unsafe access to optional values
-* [ ] Support optional strings, f128 values and nested class values
+* [x] Support optional strings, f128 values and nested class values
 
 ---
 

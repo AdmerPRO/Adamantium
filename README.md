@@ -445,8 +445,9 @@ var options = Options();
 print.newline(options.value); // None
 ```
 
-Required function parameters must come before optional ones. Optional strings,
-`f128` values, and nested class values are reserved for a later representation.
+Required function parameters must come before optional ones. Strings and `f128` values preserve
+their complete value when optional. Optional nested class values can be omitted or accessed like
+ordinary objects; accessing a field or method through `None` produces a runtime error.
 
 ### Panic and warnings
 

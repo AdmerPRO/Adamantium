@@ -10,6 +10,7 @@ extern ad_message
 extern ad_object_new
 extern ad_object_clone
 extern ad_list_error
+extern ad_optional_error
 
 section .text
 main:

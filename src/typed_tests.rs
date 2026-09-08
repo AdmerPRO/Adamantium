@@ -339,7 +339,6 @@ fn logical_remainder_and_optional_values_are_typed() {
         "fun main() { panic(123); }",
         "fun main() { optional(1,2); } fun optional($value:int) r:None {}",
         "fun main() {} fun bad($optional:int,required:int) r:None {}",
-        "class Bad(&value:string) { fun __new__() {} } fun main() {}",
         "class Required(value:int) { fun __new__() {} } fun main() { var value=Required(); }",
     ] {
         assert!(checked(source).is_err(), "accepted {source}");
@@ -360,4 +359,28 @@ fn logical_remainder_and_optional_values_are_typed() {
         )
         .is_ok()
     );
+}
+
+#[test]
+fn wide_optional_values_and_nested_classes_are_typed() {
+    let result = checked(
+        r#"
+        class Child(pub value:int) { fun __new__() {} }
+        class Options(pub &text:string,pub &wide:f128,pub &child:Child) { fun __new__() {} }
+        fun main() {
+            var child=Child(value=7);
+            var empty=Options();
+            var full=Options(text="hello",wide=1.25:f128,child=child);
+            print.newline(empty.text);
+            print.newline(full.text);
+            print.newline(full.wide);
+            print.newline(full.child.value);
+            show(); show("world",2.5:f128,child);
+        }
+        fun show($text:string,$wide:f128,$child:Child) r:None {
+            print.newline(text); print.newline(wide); print.newline(child.value);
+        }
+    "#,
+    );
+    assert!(result.is_ok(), "{:?}", result.err());
 }

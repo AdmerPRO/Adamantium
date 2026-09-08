@@ -33,6 +33,25 @@ fn native_lists_create_read_and_update_elements() {
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_wide_optional_values() {
+    let source = r#"class Child(pub value:int){fun __new__(){}} class Options(pub &text:string,pub &wide:f128,pub &child:Child){fun __new__(){}} fun main(){var child=Child(value=7);var empty=Options();var full=Options(text="hello",wide=1.25:f128,child=child);print.newline(empty.text);print.newline(full.text);print.newline(full.wide);print.newline(full.child.value);}"#;
+    let output = Project::new(source).run();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"None\r\nhello\r\n1.25\r\n7\r\n");
+
+    let missing = r#"class Child(pub value:int){fun __new__(){}} class Options(pub &child:Child){fun __new__(){}} fun main(){var empty=Options();print.newline(empty.child.value);}"#;
+    let output = Project::new(missing).run();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("through None"));
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_explicit_as_conversions_are_checked() {
     let output = Project::new(
         "fun main() { var source=300:i32; var narrow=source.as(i16); print.newline(narrow); var decimal=narrow.as(f64); print.newline(decimal); }",

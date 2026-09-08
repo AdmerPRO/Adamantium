@@ -21,6 +21,7 @@ pub enum Kind {
     Compare(Comparison, Box<Expression>, Box<Expression>),
     Logical(LogicalOperator, Box<Expression>, Box<Expression>),
     Convert(Box<Expression>),
+    Unwrap(Box<Expression>),
     Call(String, Vec<Expression>),
     Construct(u32, Vec<Expression>, String),
     List(Vec<Expression>),
@@ -224,7 +225,12 @@ impl Checker<'_> {
             return Ok(expr);
         }
         if matches!(to, Type::Optional(_)) {
-            if let Kind::Constant(value) = expr.kind {
+            let wide = Type::from_id(match to {
+                Type::Optional(inner) => inner,
+                _ => unreachable!(),
+            })
+            .is_some_and(Type::wide_optional_value);
+            if !wide && let Kind::Constant(value) = expr.kind {
                 return Ok(Expression {
                     ty: to,
                     kind: Kind::Constant(types::convert(value, expr.ty, to)?),
@@ -405,7 +411,16 @@ impl Checker<'_> {
                 }
             }
             Expr::Field(object, field_name, position) => {
-                let object = self.expression(object, None)?;
+                let mut object = self.expression(object, None)?;
+                if let Type::Optional(inner) = object.ty
+                    && Type::from_id(inner).is_some_and(|ty| matches!(ty, Type::Class(_)))
+                {
+                    let ty = Type::from_id(inner).unwrap();
+                    object = Expression {
+                        ty,
+                        kind: Kind::Unwrap(Box::new(object)),
+                    };
+                }
                 let Type::Class(id) = object.ty else {
                     return Err(
                         position.error(format!("invalid access: {} has no fields", object.ty))
@@ -434,7 +449,16 @@ impl Checker<'_> {
                 }
             }
             Expr::MethodCall(object, method_name, arguments, position) => {
-                let object = self.expression(object, None)?;
+                let mut object = self.expression(object, None)?;
+                if let Type::Optional(inner) = object.ty
+                    && Type::from_id(inner).is_some_and(|ty| matches!(ty, Type::Class(_)))
+                {
+                    let ty = Type::from_id(inner).unwrap();
+                    object = Expression {
+                        ty,
+                        kind: Kind::Unwrap(Box::new(object)),
+                    };
+                }
                 let Type::Class(id) = object.ty else {
                     return Err(
                         position.error(format!("invalid access: {} has no methods", object.ty))

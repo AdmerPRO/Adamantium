@@ -227,6 +227,12 @@ impl Generator {
                 self.evaluate(op, expr.ty, value.ty, &[slot]);
                 self.next_slot = mark;
             }
+            Kind::Unwrap(value) => {
+                let compact = self.label("optional_compact");
+                let done = self.label("optional_unwrapped");
+                self.expression(value);
+                self.emit(format!("    test rdx, rdx\n    jnz {compact}\n    call ad_optional_error\n    jmp ad_exit_error\n{compact}:\n    cmp rdx, 2\n    jne {done}\n    mov r11, rax\n    mov rax, [r11]\n    mov rdx, [r11 + 8]\n{done}:"));
+            }
             Kind::Not(value) => {
                 self.expression(value);
                 self.emit("    test rax, rax\n    sete al\n    movzx eax, al\n    xor edx, edx");

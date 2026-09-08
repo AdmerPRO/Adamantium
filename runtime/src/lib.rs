@@ -26,6 +26,12 @@ pub extern "C" fn ad_list_error(index: usize, length: usize) -> u32 {
     2
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn ad_optional_error() -> u32 {
+    eprintln!("Adamantium runtime error: cannot access a field or method through None");
+    2
+}
+
 #[repr(C)]
 pub struct Request {
     pub a: Value,

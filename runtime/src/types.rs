@@ -27,6 +27,12 @@ pub enum Type {
 }
 
 impl Type {
+    pub fn wide_optional_value(self) -> bool {
+        matches!(
+            self,
+            Self::String | Self::F128 | Self::Class(_) | Self::List(_)
+        )
+    }
     pub fn parse(name: &str) -> Option<Self> {
         Some(match name {
             "i8" => Self::I8,
@@ -347,8 +353,11 @@ pub fn convert(value: Value, from: Type, to: Type) -> Result<Value, String> {
             return Ok(Value::default());
         }
         if from.id() == inner {
-            if matches!(from, Type::String | Type::F128 | Type::Class(_)) {
-                return Err(format!("optional {from} values are not supported yet"));
+            if from.wide_optional_value() {
+                return Ok(Value {
+                    lo: Box::into_raw(Box::new(value)) as u64,
+                    hi: 2,
+                });
             }
             return Ok(Value {
                 lo: value.lo,
@@ -393,6 +402,14 @@ pub fn display(value: Value, ty: Type) -> Result<String, String> {
         Type::F32 => f32::from_bits(value.lo as u32).to_string(),
         Type::F64 => f64::from_bits(value.lo).to_string(),
         Type::F128 => Quad::from_bits(value.bits()).to_string(),
+        Type::String => {
+            if value.lo == 0 && value.hi != 0 {
+                return Err("invalid string pointer".into());
+            }
+            let bytes =
+                unsafe { std::slice::from_raw_parts(value.lo as *const u8, value.hi as usize) };
+            String::from_utf8_lossy(bytes).into_owned()
+        }
         Type::Bool => if value.lo == 0 { "false" } else { "true" }.into(),
         Type::None => "None".into(),
         Type::Enum(_) => value.lo.to_string(),
@@ -404,16 +421,21 @@ pub fn display(value: Value, ty: Type) -> Result<String, String> {
                 "None".into()
             } else {
                 let inner = Type::from_id(inner).ok_or("invalid optional type")?;
-                return display(
+                let value = if value.hi == 2 {
+                    if value.lo == 0 {
+                        return Err("invalid boxed optional value".into());
+                    }
+                    unsafe { *(value.lo as *const Value) }
+                } else {
                     Value {
                         lo: value.lo,
                         hi: 0,
-                    },
-                    inner,
-                );
+                    }
+                };
+                return display(value, inner);
             }
         }
-        _ => return Err("string values must be written as UTF-8 bytes".into()),
+        _ => unreachable!("integer values are handled before the type match"),
     })
 }
 
