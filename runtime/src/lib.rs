@@ -1,5 +1,6 @@
 pub mod types;
 
+use std::ffi::{CStr, c_char};
 use std::io::Write;
 use types::{Type, Value};
 
@@ -30,6 +31,118 @@ pub extern "C" fn ad_list_error(index: usize, length: usize) -> u32 {
 pub extern "C" fn ad_optional_error() -> u32 {
     eprintln!("Adamantium runtime error: cannot access a field or method through None");
     2
+}
+
+#[repr(C)]
+pub struct ArgumentSpec {
+    pub name: *const u8,
+    pub name_len: usize,
+    pub ty: u32,
+    pub optional: u32,
+}
+
+/// # Safety
+/// `argv`, `specs`, and `output` must point to arrays described by their counts.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ad_parse_arguments(
+    argc: usize,
+    argv: *const *const c_char,
+    specs: *const ArgumentSpec,
+    count: usize,
+    output: *mut Value,
+) -> u32 {
+    let argv = unsafe { std::slice::from_raw_parts(argv, argc) };
+    let specs = unsafe { std::slice::from_raw_parts(specs, count) };
+    let output = unsafe { std::slice::from_raw_parts_mut(output, count) };
+    output.fill(Value::default());
+    let mut seen = vec![false; count];
+    let mut index = 1;
+    while index < argv.len() {
+        let argument = unsafe { CStr::from_ptr(argv[index]) }.to_string_lossy();
+        let Some(name) = argument.strip_prefix("--") else {
+            eprintln!("Adamantium argument warning: unknown argument '{argument}'");
+            index += 1;
+            continue;
+        };
+        let found = specs.iter().position(|spec| {
+            let bytes = unsafe { std::slice::from_raw_parts(spec.name, spec.name_len) };
+            bytes == name.as_bytes()
+        });
+        let Some(slot) = found else {
+            eprintln!("Adamantium argument warning: unknown argument '--{name}'");
+            index += 1;
+            if index < argv.len() {
+                let next = unsafe { CStr::from_ptr(argv[index]) }.to_bytes();
+                if !next.starts_with(b"--") {
+                    index += 1;
+                }
+            }
+            continue;
+        };
+        if index + 1 >= argv.len() {
+            eprintln!("Adamantium argument warning: missing value for '--{name}'");
+            index += 1;
+            continue;
+        }
+        let bytes = unsafe { CStr::from_ptr(argv[index + 1]) }.to_bytes();
+        if bytes.starts_with(b"--") {
+            eprintln!("Adamantium argument warning: missing value for '--{name}'");
+            index += 1;
+            continue;
+        }
+        let text = match std::str::from_utf8(bytes) {
+            Ok(text) => text,
+            Err(_) => return 2,
+        };
+        let declared = Type::from_id(specs[slot].ty).unwrap();
+        let inner = if let Type::Optional(inner) = declared {
+            Type::from_id(inner).unwrap()
+        } else {
+            declared
+        };
+        let value = if inner == Type::String {
+            Value {
+                lo: bytes.as_ptr() as u64,
+                hi: bytes.len() as u64,
+            }
+        } else if inner == Type::Bool {
+            match text {
+                "true" => Value { lo: 1, hi: 0 },
+                "false" => Value::default(),
+                _ => {
+                    eprintln!("Adamantium argument error: '--{name}' expects bool, found '{text}'");
+                    return 2;
+                }
+            }
+        } else {
+            match types::literal(text, inner) {
+                Ok(value) => value,
+                Err(error) => {
+                    eprintln!(
+                        "Adamantium argument error: invalid value '{text}' for '--{name}' ({inner}): {error}"
+                    );
+                    return 2;
+                }
+            }
+        };
+        output[slot] = if declared == inner {
+            value
+        } else {
+            types::convert(value, inner, declared).unwrap()
+        };
+        seen[slot] = true;
+        index += 2;
+    }
+    for (slot, spec) in specs.iter().enumerate() {
+        if !seen[slot] && spec.optional == 0 {
+            let name = unsafe { std::slice::from_raw_parts(spec.name, spec.name_len) };
+            eprintln!(
+                "Adamantium argument warning: missing required argument '--{}'",
+                String::from_utf8_lossy(name)
+            );
+        }
+    }
+    0
 }
 
 #[repr(C)]

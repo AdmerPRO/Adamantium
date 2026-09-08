@@ -32,6 +32,29 @@ directory. `adamantium PROJECT_DIRECTORY` remains an alias for
 `adamantium build PROJECT_DIRECTORY`. Run `adamantium --help` or
 `adamantium --version` for CLI information.
 
+### Program arguments
+
+Parameters declared by `main` are populated from named command-line arguments. Missing required
+arguments and unknown arguments produce warnings. Invalid values stop the program with an error.
+Prefix a parameter with `$` to make it optional:
+
+```adamantium
+fun main(number:int,$message:string,$enabled:bool) {
+    print.newline(number);
+    print.newline(message);
+    print.newline(enabled);
+}
+```
+
+```text
+adamantium run --number 7 --message "Hello" --enabled true
+adamantium run path/to/project --number 7
+```
+
+The built executable accepts the same arguments directly. Supported argument types are integers,
+floating-point values, strings and booleans (`true` or `false`). Omitted optional values are
+passed to `main` as `None`.
+
 The compiler reads `code/main.ad`, `project.toml` and `requirement.toml`
 from the project directory. It writes `<name>.asm`, `<name>.obj` and
 `<name>.exe` into that project's `target` directory, where `name` comes

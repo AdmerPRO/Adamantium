@@ -1169,8 +1169,21 @@ impl Parser {
         }
         let parameters = self.bindings.len();
         let result = if source_name == "main" && owner.is_none() {
-            if parameters != 0 {
-                return Err(self.position().error("main must have no parameters"));
+            for ty in &self.types[..parameters] {
+                let ty = ty.unwrap();
+                let inner = if let Type::Optional(inner) = ty {
+                    Type::from_id(inner).unwrap()
+                } else {
+                    ty
+                };
+                if matches!(
+                    inner,
+                    Type::Class(_) | Type::List(_) | Type::Enum(_) | Type::None
+                ) {
+                    return Err(self.position().error(format!(
+                        "main parameter type {inner} cannot be read from the command line"
+                    )));
+                }
             }
             None
         } else if source_name == "__new__" && owner.is_some() {

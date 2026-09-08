@@ -273,7 +273,10 @@ fn rejects_invalid_programs_with_diagnostics() {
     for (source, expected) in [
         ("", "main"),
         ("fun main() {} fun main() {}", "already declared"),
-        ("fun main(a:int) {}", "no parameters"),
+        (
+            "class C(value:int) { fun __new__() {} } fun main(value:C) {}",
+            "cannot be read from the command line",
+        ),
         ("fun main() {", "expected a statement"),
         ("fun main() { var a = a; }", "not declared"),
         ("fun main() { var a = 1; var a = 2; }", "already declared"),

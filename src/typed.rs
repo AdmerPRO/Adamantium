@@ -59,6 +59,7 @@ pub struct Function {
     pub result: Option<usize>,
     pub types: Vec<Type>,
     pub instructions: Vec<Instruction>,
+    pub parameter_names: Vec<String>,
 }
 pub struct Program {
     pub functions: Vec<Function>,
@@ -117,6 +118,10 @@ pub fn check(program: &syntax::Program) -> Result<Program, String> {
                 .map(|t| t.expect("every variable has an initializer or signature type"))
                 .collect(),
             instructions,
+            parameter_names: function.bindings[..function.parameters]
+                .iter()
+                .map(|(name, _)| name.clone())
+                .collect(),
         });
     }
     Ok(Program {

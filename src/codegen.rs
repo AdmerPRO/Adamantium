@@ -499,6 +499,33 @@ impl Generator {
         ));
     }
 }
+fn cli_entry(function: &Function) -> String {
+    let count = function.parameters;
+    let output_size = count.max(1) * 16;
+    let frame = (output_size + 63) / 16 * 16;
+    let mut text = format!(
+        "ad_cli_main:\n    push rbp\n    mov rbp, rsp\n    sub rsp, {frame}\n    lea r8, [rel ad_argument_specs]\n    mov r9d, {count}\n    lea rax, [rbp - {output_size}]\n    mov [rsp + 32], rax\n    call ad_parse_arguments\n    test eax, eax\n    jnz ad_exit_error\n"
+    );
+    if count != 0 {
+        text.push_str(&format!("    sub rsp, {}\n", count * 16));
+        for index in 0..count {
+            text.push_str(&format!(
+                "    mov rax, [rbp - {}]\n    mov rdx, [rbp - {}]\n    mov [rsp + {}], rax\n    mov [rsp + {}], rdx\n",
+                output_size - index * 16,
+                output_size - index * 16 - 8,
+                index * 16,
+                index * 16 + 8
+            ));
+        }
+    }
+    text.push_str("    call ad_fun_main\n");
+    if count != 0 {
+        text.push_str(&format!("    add rsp, {}\n", count * 16));
+    }
+    text.push_str("    mov rsp, rbp\n    pop rbp\n    ret\n");
+    text
+}
+
 pub fn assembly(program: &Program) -> String {
     let mut generator = Generator {
         text: include_str!("runtime.asm").into(),
@@ -509,6 +536,12 @@ pub fn assembly(program: &Program) -> String {
         next_label: 0,
         loop_stack: Vec::new(),
     };
+    let main = program
+        .functions
+        .iter()
+        .find(|function| function.name == "main")
+        .expect("checked programs always contain main");
+    generator.emit(cli_entry(main));
     for function in &program.functions {
         generator.function(function);
     }
@@ -526,6 +559,33 @@ pub fn assembly(program: &Program) -> String {
             ));
         }
         generator.text.push_str("    db 0\n");
+    }
+    generator.text.push_str("ad_argument_specs:\n");
+    if main.parameters == 0 {
+        generator.text.push_str("    dq 0\n");
+    }
+    for (index, (name, ty)) in main
+        .parameter_names
+        .iter()
+        .zip(&main.types[..main.parameters])
+        .enumerate()
+    {
+        generator.text.push_str(&format!(
+            "    dq ad_argument_name_{index}\n    dq {}\n    dd {}\n    dd {}\n",
+            name.len(),
+            ty.id(),
+            u8::from(matches!(ty, Type::Optional(_)))
+        ));
+    }
+    for (index, name) in main.parameter_names.iter().enumerate() {
+        let bytes = name
+            .bytes()
+            .map(|byte| byte.to_string())
+            .collect::<Vec<_>>();
+        generator.text.push_str(&format!(
+            "ad_argument_name_{index}:\n    db {}\n",
+            bytes.join(", ")
+        ));
     }
     generator.text
 }

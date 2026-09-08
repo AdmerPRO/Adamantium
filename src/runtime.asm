@@ -11,13 +11,18 @@ extern ad_object_new
 extern ad_object_clone
 extern ad_list_error
 extern ad_optional_error
+extern ad_parse_arguments
 
 section .text
 main:
-    sub rsp, 40
+    sub rsp, 56
+    mov [rsp + 40], rcx
+    mov [rsp + 48], rdx
     mov ecx, 65001
     call SetConsoleOutputCP
-    call ad_fun_main
+    mov rcx, [rsp + 40]
+    mov rdx, [rsp + 48]
+    call ad_cli_main
     xor ecx, ecx
     call ExitProcess
 

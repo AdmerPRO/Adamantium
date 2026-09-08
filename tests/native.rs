@@ -52,6 +52,44 @@ fn native_wide_optional_values() {
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_main_command_line_arguments() {
+    let project = Project::new(
+        "fun main(number:int,$text:string,$enabled:bool){print.newline(number);print.newline(text);print.newline(enabled);}",
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_adamantium"))
+        .arg("run")
+        .arg(&project.0)
+        .args(["--number", "7", "--text", "hello", "--enabled", "true"])
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"7\r\nhello\r\ntrue\r\n");
+
+    let executable = project.0.join("target/NativeTest.exe");
+    let missing = Command::new(&executable)
+        .args(["--text", "present", "--unknown", "value"])
+        .output()
+        .unwrap();
+    assert_eq!(missing.status.code(), Some(0));
+    let stderr = String::from_utf8_lossy(&missing.stderr);
+    assert!(stderr.contains("missing required argument '--number'"));
+    assert!(stderr.contains("unknown argument '--unknown'"));
+
+    let invalid = Command::new(executable)
+        .args(["--number", "wrong"])
+        .output()
+        .unwrap();
+    assert_eq!(invalid.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&invalid.stderr).contains("argument error"));
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_explicit_as_conversions_are_checked() {
     let output = Project::new(
         "fun main() { var source=300:i32; var narrow=source.as(i16); print.newline(narrow); var decimal=narrow.as(f64); print.newline(decimal); }",

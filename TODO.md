@@ -350,12 +350,12 @@ fun main(...) {
 * [x] Detect `main`
 * [x] Validate `main`
 * [x] Generate executable entry point
-* [ ] Implement command-line arguments
-* [ ] Map CLI arguments to `main` parameters
-* [ ] Warn about missing required arguments
-* [ ] Warn about unknown arguments
-* [ ] Error on invalid argument types
-* [ ] Implement optional `$` arguments
+* [x] Implement command-line arguments — named `--name value` pairs
+* [x] Map CLI arguments to `main` parameters
+* [x] Warn about missing required arguments
+* [x] Warn about unknown arguments
+* [x] Error on invalid argument types
+* [x] Implement optional `$` arguments
 
 Example:
 

@@ -28,7 +28,7 @@ fn main() -> ExitCode {
 const HELP: &str = "Adamantium compiler (Windows x64)\n\
 Usage:\n\
   adamantium build [PROJECT_DIRECTORY]\n\
-  adamantium run [PROJECT_DIRECTORY]\n\
+  adamantium run [PROJECT_DIRECTORY] [--name value ...]\n\
   adamantium new <PROJECT_NAME_OR_PATH>\n\
   adamantium --help\n\
   adamantium --version\n\n\
@@ -41,7 +41,7 @@ enum Action {
     Help,
     Version,
     Build(PathBuf),
-    Run(PathBuf),
+    Run(PathBuf, Vec<OsString>),
     New(PathBuf),
 }
 
@@ -53,11 +53,12 @@ fn cli(args: Vec<OsString>) -> Result<ExitCode, String> {
             let executable = build(&root)?;
             println!("Built {}", executable.display());
         }
-        Action::Run(root) => {
+        Action::Run(root, arguments) => {
             let executable = build(&root)?;
             eprintln!("Built {}", executable.display());
             let status = Command::new(&executable)
                 .current_dir(&root)
+                .args(arguments)
                 .status()
                 .map_err(|e| format!("could not run {}: {e}", executable.display()))?;
             return Ok(status
@@ -93,14 +94,22 @@ fn action(args: Vec<OsString>) -> Result<Action, String> {
         no_more_args(args)?;
         return Ok(Action::New(root.into()));
     }
-    if first == "build" || first == "run" {
+    if first == "build" {
         let root = args.next().map_or_else(current_directory, Ok)?;
         no_more_args(args)?;
-        return if first == "build" {
-            Ok(Action::Build(root.into()))
+        return Ok(Action::Build(root.into()));
+    }
+    if first == "run" {
+        let remaining = args.collect::<Vec<_>>();
+        let (root, arguments) = if remaining
+            .first()
+            .is_some_and(|argument| !argument.to_string_lossy().starts_with('-'))
+        {
+            (PathBuf::from(&remaining[0]), remaining[1..].to_vec())
         } else {
-            Ok(Action::Run(root.into()))
+            (PathBuf::from(current_directory()?), remaining)
         };
+        return Ok(Action::Run(root, arguments));
     }
     if first.to_string_lossy().starts_with('-') {
         return Err(format!(
