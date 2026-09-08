@@ -436,6 +436,8 @@ fn parses_value_and_symbol_aliases() {
             operation(1,2);
             operation=nothing().as_variable;
             operation();
+            var short=nothing();
+            short();
             var E=Choice.as_variable;
             var choice=E.first;
             var B=Box.as_variable;
@@ -448,6 +450,7 @@ fn parses_value_and_symbol_aliases() {
         .is_ok()
     );
     assert!(parse("fun main() { var alias=missing().as_variable; }").is_err());
+    assert!(parse("fun main() { var alias=missing(); alias(); }").is_err());
 }
 
 #[test]

@@ -206,6 +206,8 @@ fn native_value_and_function_aliases() {
             print.newline(operation(2,3));
             operation = twice().as_variable;
             print.newline(operation(6));
+            var short = add();
+            print.newline(short(3,4));
         }
         fun add(a:int,b:int) r:int { r=a+b; }
         fun twice(value:int) r:int { r=value*2; }
@@ -218,7 +220,7 @@ fn native_value_and_function_aliases() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert_eq!(output.stdout, b"20\r\n15\r\n25\r\n15\r\n5\r\n12\r\n");
+    assert_eq!(output.stdout, b"20\r\n15\r\n25\r\n15\r\n5\r\n12\r\n7\r\n");
 }
 
 #[test]

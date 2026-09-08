@@ -34,6 +34,8 @@ fun main() {
     print.newline(numbers[1]);
     print.newline(utils:module_add(2,3));
     print.newline(module_add(4,5));
+    var add_alias = module_add();
+    print.newline(add_alias(5,6));
     print.newline(utils/tools:module_multiply(3,4));
     // print.sameline does not append a newline.
     print.sameline("Hello, ");

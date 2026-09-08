@@ -309,6 +309,14 @@ var CounterAlias = Counter.as_variable;
 var counter = CounterAlias(value=1,step=2);
 ```
 
+A function value can also use the shorter form. The empty parentheses identify the function;
+arguments are supplied when the variable is called:
+
+```adamantium
+var operation = add();
+print.newline(operation(2,3));
+```
+
 ### Arithmetic and assignment
 
 Initializers, assignments, print arguments, and function arguments accept numeric

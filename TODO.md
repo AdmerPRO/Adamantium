@@ -218,7 +218,7 @@ Implement:
 * [x] `List` — homogeneous literals, explicit element types, indexing and element assignment
 * [x] `enum` — named variants with distinct inferred types
 * [x] `class` — required typed fields, methods, construction and value copying
-* [ ] `fun`
+* [x] `fun` — callable function values through variable aliases
 
 ### Type aliases
 
@@ -325,16 +325,16 @@ fun add(a:int, b:int) r:int {
 ```
 
 * [x] Implement functions
-* [x] Implement parameters — supported scalar types, passed by value
+* [x] Implement parameters — supported value types, passed by value
 * [x] Implement named return variables
-* [x] Implement return types — supported scalar types and `None`
+* [x] Implement return types — supported value types and `None`
 * [x] Implement implicit final return
 * [x] Implement `return` — `return <named-result>;` only
 * [x] Implement early returns
 * [x] Implement `None` return type
 * [x] Implement function calls
 * [ ] Implement recursion
-* [ ] Implement function values
+* [x] Implement function values — `var callable = function();` and explicit `as_variable`
 
 ---
 
@@ -453,7 +453,7 @@ class Player (
 * [x] Implement object creation — named field arguments with value-copy semantics
 * [x] Implement object field access
 * [x] Implement object method calls
-* [ ] Implement optional fields
+* [x] Implement optional fields
 * [ ] Implement class scope rules
 
 ---
@@ -1235,7 +1235,7 @@ Create the official standard library.
 * [x] Create GitHub Actions workflow
 * [x] Build compiler on every push
 * [x] Run compiler tests
-* [ ] Run Adamantium tests
+* [x] Run Adamantium tests — native regression programs on Windows
 * [x] Run formatting checks
 * [x] Run static analysis
 * [x] Check spelling with Typos on all three CI runners
@@ -1260,7 +1260,7 @@ Create the official standard library.
 * [x] Module tests — namespaces, qualified calls, use imports and nested files
 * [x] Class tests — parsing, typing, visibility, construction, mutation and native copying
 * [x] Enum tests
-* [ ] Alias tests
+* [x] Alias tests
 * [ ] Memory-safety tests
 * [x] Code generation tests
 * [x] NASM generation tests
@@ -1284,7 +1284,7 @@ Create clear compiler diagnostics.
 * [ ] "Did you mean?" suggestions
 * [ ] Multi-error reporting
 * [ ] Context-aware diagnostics
-* [ ] Clear runtime panic messages
+* [x] Clear runtime panic messages
 
 ---
 
@@ -1380,7 +1380,7 @@ The recommended implementation order is:
 2. [x] Parser
 3. [x] AST
 4. [x] Variables
-5. [x] Types — current scalar, enum and class types
+5. [x] Types — current scalar, list, enum, class and function-value types
 6. [x] Type checker
 7. [x] Functions
 8. [x] `if`
@@ -1393,7 +1393,7 @@ The recommended implementation order is:
 15. [x] Classes
 16. [x] Enums
 17. [ ] Memory-safety model
-18. [ ] Alias system
+18. [x] Alias system — core value and symbol aliases
 19. [x] NASM code generation
 20. [x] Linker integration
 21. [x] `adamantium build`
@@ -1410,5 +1410,5 @@ The recommended implementation order is:
 32. [ ] Optimization
 33. [ ] Documentation
 34. [ ] VS Code support
-35. [ ] CI/CD
+35. [x] CI/CD — push and pull-request validation workflows
 36. [ ] Stable release

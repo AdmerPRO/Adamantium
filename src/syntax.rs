@@ -464,6 +464,19 @@ impl Parser {
                 .get(self.cursor + offset + 1)
                 .is_some_and(|(token, _)| token == &Token::Word("as_variable".into()))
     }
+    fn bare_function_target(&self, alias_name: &str) -> Option<String> {
+        let Some((Token::Word(name), _)) = self.tokens.get(self.cursor) else {
+            return None;
+        };
+        let empty_call = self.tokens.get(self.cursor + 1).map(|token| &token.0)
+            == Some(&Token::Symbol('('))
+            && self.tokens.get(self.cursor + 2).map(|token| &token.0) == Some(&Token::Symbol(')'))
+            && self.tokens.get(self.cursor + 3).map(|token| &token.0) == Some(&Token::Symbol(';'));
+        let called_later = self.tokens[self.cursor + 4..].windows(2).any(|tokens| {
+            tokens[0].0 == Token::Word(alias_name.into()) && tokens[1].0 == Token::Symbol('(')
+        });
+        (empty_call && called_later).then(|| name.clone())
+    }
     fn variable(&self, name: &str, read: bool, position: Position) -> Result<usize, String> {
         let binding = self
             .bindings
@@ -787,6 +800,24 @@ impl Parser {
                 };
                 let name = self.name()?;
                 self.symbol('=')?;
+                if let Some(target) = self.bare_function_target(&name) {
+                    if !changeable {
+                        return Err(position.error("function values cannot be static"));
+                    }
+                    self.next();
+                    self.next();
+                    self.next();
+                    if self.bindings.contains_key(&name) || self.symbol_aliases.contains_key(&name)
+                    {
+                        return Err(
+                            position.error(format!("variable '{name}' is already declared"))
+                        );
+                    }
+                    self.symbol_aliases
+                        .insert(name, SymbolAlias::Function(target.clone()));
+                    self.symbol(';')?;
+                    return Ok(Statement::Noop(Some(target)));
+                }
                 if self.is_alias_target() {
                     if !changeable {
                         return Err(position.error("symbol aliases cannot be static"));
