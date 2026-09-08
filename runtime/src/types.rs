@@ -403,6 +403,9 @@ pub fn display(value: Value, ty: Type) -> Result<String, String> {
         Type::F64 => f64::from_bits(value.lo).to_string(),
         Type::F128 => Quad::from_bits(value.bits()).to_string(),
         Type::String => {
+            if value.lo == 0 && value.hi == 0 {
+                return Ok(String::new());
+            }
             if value.lo == 0 && value.hi != 0 {
                 return Err("invalid string pointer".into());
             }

@@ -86,6 +86,12 @@ fn native_main_command_line_arguments() {
         .unwrap();
     assert_eq!(invalid.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&invalid.stderr).contains("argument error"));
+
+    let required_string = Project::new("fun main(text:string){print.newline(text);}");
+    let output = required_string.run();
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"\r\n");
+    assert!(String::from_utf8_lossy(&output.stderr).contains("missing required argument '--text'"));
 }
 
 #[test]

@@ -457,6 +457,18 @@ fn parses_value_and_symbol_aliases() {
 }
 
 #[test]
+fn shorthand_function_alias_detection_stays_inside_its_function() {
+    let error = parse(
+        "fun main() { var value=result(); print.newline(value); } fun other() r:None { value(); } fun result() r:int { r=7; }",
+    )
+    .unwrap_err();
+    assert!(
+        error.contains("function 'value' is not declared"),
+        "{error}"
+    );
+}
+
+#[test]
 fn combines_namespaced_modules_and_use_imports() {
     let files = vec![
         ("utils".into(), "fun value(a:int) r:int { r=a+1; } fun other() r:int { r=2; } enum State { ready }".into()),

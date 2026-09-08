@@ -20,6 +20,9 @@ fn lists_are_homogeneous_and_indexed_by_integers() {
         Ok(_) => panic!("an empty List without a type must be rejected"),
     };
     assert!(empty.contains("ambiguous List type"));
+    assert!(checked("fun main() { var nested=List[List[1]]; }").is_err());
+    assert!(checked("fun consume(values:List[List[int]]) r:None {} fun main() {}").is_err());
+    assert!(checked("class C(&values:List[int]) { fun __new__() {} } fun main() {}").is_err());
 }
 
 #[test]

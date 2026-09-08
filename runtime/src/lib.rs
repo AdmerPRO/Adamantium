@@ -200,7 +200,11 @@ pub unsafe extern "C" fn ad_print(value: *const Value, ty: u32, newline: u32) ->
     };
     let rendered;
     let bytes = if ty == Type::String {
-        unsafe { std::slice::from_raw_parts(value.lo as *const u8, value.hi as usize) }
+        if value.lo == 0 && value.hi == 0 {
+            &[]
+        } else {
+            unsafe { std::slice::from_raw_parts(value.lo as *const u8, value.hi as usize) }
+        }
     } else {
         rendered = match types::display(*value, ty) {
             Ok(text) => text,

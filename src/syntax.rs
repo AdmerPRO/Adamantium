@@ -473,9 +473,24 @@ impl Parser {
             == Some(&Token::Symbol('('))
             && self.tokens.get(self.cursor + 2).map(|token| &token.0) == Some(&Token::Symbol(')'))
             && self.tokens.get(self.cursor + 3).map(|token| &token.0) == Some(&Token::Symbol(';'));
-        let called_later = self.tokens[self.cursor + 4..].windows(2).any(|tokens| {
-            tokens[0].0 == Token::Word(alias_name.into()) && tokens[1].0 == Token::Symbol('(')
-        });
+        let mut depth = 0;
+        let mut called_later = false;
+        let mut index = self.cursor + 4;
+        while index + 1 < self.tokens.len() {
+            match self.tokens[index].0 {
+                Token::Symbol('{') => depth += 1,
+                Token::Symbol('}') if depth == 0 => break,
+                Token::Symbol('}') => depth -= 1,
+                _ => (),
+            }
+            if self.tokens[index].0 == Token::Word(alias_name.into())
+                && self.tokens[index + 1].0 == Token::Symbol('(')
+            {
+                called_later = true;
+                break;
+            }
+            index += 1;
+        }
         (empty_call && called_later).then(|| name.clone())
     }
     fn variable(&self, name: &str, read: bool, position: Position) -> Result<usize, String> {
@@ -497,6 +512,11 @@ impl Parser {
             self.symbol('[')?;
             let element = self.type_name()?;
             self.symbol(']')?;
+            if matches!(element, Type::List(_) | Type::Optional(_)) {
+                return Err(position.error(
+                    "nested and optional List types are not supported by the current runtime type representation",
+                ));
+            }
             return Ok(Type::List(element.id()));
         }
         Type::parse(&name)
@@ -1157,6 +1177,11 @@ impl Parser {
                 self.symbol(':')?;
                 let mut ty = self.type_name()?;
                 if optional {
+                    if matches!(ty, Type::List(_)) {
+                        return Err(position.error(
+                            "optional List values are not supported by the current runtime type representation",
+                        ));
+                    }
                     ty = Type::Optional(ty.id());
                 }
                 self.bind(parameter, true, true, Some(ty), position)?;
@@ -1320,6 +1345,11 @@ impl Parser {
                     ));
                 }
                 if optional {
+                    if matches!(ty, Type::List(_)) {
+                        return Err(field_position.error(
+                            "optional List fields are not supported by the current runtime type representation",
+                        ));
+                    }
                     ty = Type::Optional(ty.id());
                 }
                 if fields.iter().any(|value: &ClassField| value.name == field) {

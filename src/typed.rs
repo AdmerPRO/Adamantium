@@ -418,6 +418,9 @@ impl Checker<'_> {
                     return Err("ambiguous List type: an empty List requires an explicit type, for example List[]:List[int]".into());
                 }
                 let (element_ty, checked) = if let Some(element_ty) = expected_element {
+                    if matches!(element_ty, Type::List(_) | Type::Optional(_)) {
+                        return Err("nested and optional List element types are not supported by the current runtime type representation".into());
+                    }
                     let checked = values
                         .iter()
                         .map(|value| self.expression(value, Some(element_ty)))
@@ -440,6 +443,9 @@ impl Checker<'_> {
                                 value.ty
                             ));
                         };
+                    }
+                    if matches!(element_ty, Type::List(_) | Type::Optional(_)) {
+                        return Err("nested and optional List element types are not supported by the current runtime type representation".into());
                     }
                     let checked = checked
                         .into_iter()

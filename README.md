@@ -112,6 +112,8 @@ var empty = List[]:List[int];
 ```
 
 Indexing is checked at runtime. Assigning a list to another variable creates an independent copy.
+Nested lists and optional `List` parameters or fields are currently rejected because they require
+a recursive runtime type representation.
 
 Set `ADAMANTIUM_NASM` or `ADAMANTIUM_LINKER` to override a tool's executable
 path. A custom linker must support Microsoft LINK arguments and have access to
@@ -492,6 +494,7 @@ print.newline(options.value); // None
 Required function parameters must come before optional ones. Strings and `f128` values preserve
 their complete value when optional. Optional nested class values can be omitted or accessed like
 ordinary objects; accessing a field or method through `None` produces a runtime error.
+`List` values cannot currently be optional.
 
 ### Panic and warnings
 
