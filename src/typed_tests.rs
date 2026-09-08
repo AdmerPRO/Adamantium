@@ -7,8 +7,19 @@ fn lists_are_homogeneous_and_indexed_by_integers() {
             .is_ok()
     );
     assert!(checked("fun main() { var values=List[]:List[int]; }").is_ok());
-    assert!(checked("fun main() { var values=List[1,\"wrong\"]; }").is_err());
-    assert!(checked("fun main() { var values=List[]; }").is_err());
+    let program =
+        checked("fun main() { var values=List[1,2.5]; print.newline(values[0]); }").unwrap();
+    assert_eq!(program.functions[0].types[0], Type::List(Type::F64.id()));
+    let incompatible = match checked("fun main() { var values=List[1,\"wrong\"]; }") {
+        Err(error) => error,
+        Ok(_) => panic!("incompatible List element types must be rejected"),
+    };
+    assert!(incompatible.contains("ambiguous List type"));
+    let empty = match checked("fun main() { var values=List[]; }") {
+        Err(error) => error,
+        Ok(_) => panic!("an empty List without a type must be rejected"),
+    };
+    assert!(empty.contains("ambiguous List type"));
 }
 
 fn checked(source: &str) -> Result<Program, String> {

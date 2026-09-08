@@ -248,8 +248,8 @@ var c = "Hello";  // string
 * [x] Implement default `f64`
 * [x] Implement string inference
 * [x] Implement boolean inference
-* [ ] Implement inferred list types
-* [ ] Detect ambiguous types
+* [x] Implement inferred list types — inspect every element and promote compatible numeric types
+* [x] Detect ambiguous types — empty and incompatible lists require an explicit element type
 
 ---
 

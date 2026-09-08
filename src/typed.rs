@@ -331,25 +331,39 @@ impl Checker<'_> {
                     Type::List(inner) => Type::from_id(inner),
                     _ => None,
                 });
-                let mut checked = Vec::with_capacity(values.len());
-                let element_ty = if let Some(element_ty) = expected_element {
-                    element_ty
-                } else if let Some(first) = values.first() {
-                    let first = self.expression(first, None)?;
-                    let element_ty = first.ty;
-                    checked.push(first);
-                    element_ty
-                } else {
-                    return Err(
-                        "empty List requires an explicit type, for example List[]:List[int]".into(),
-                    );
-                };
-                checked.extend(
-                    values[checked.len()..]
+                if values.is_empty() && expected_element.is_none() {
+                    return Err("ambiguous List type: an empty List requires an explicit type, for example List[]:List[int]".into());
+                }
+                let (element_ty, checked) = if let Some(element_ty) = expected_element {
+                    let checked = values
                         .iter()
                         .map(|value| self.expression(value, Some(element_ty)))
-                        .collect::<Result<Vec<_>, _>>()?,
-                );
+                        .collect::<Result<Vec<_>, _>>()?;
+                    (element_ty, checked)
+                } else {
+                    let checked = values
+                        .iter()
+                        .map(|value| self.expression(value, None))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let mut element_ty = checked[0].ty;
+                    for value in &checked[1..] {
+                        element_ty = if element_ty == value.ty {
+                            element_ty
+                        } else if element_ty.numeric() && value.ty.numeric() {
+                            promoted(element_ty, value.ty)?
+                        } else {
+                            return Err(format!(
+                                "ambiguous List type: elements have incompatible types {element_ty} and {}; add :List[Type]",
+                                value.ty
+                            ));
+                        };
+                    }
+                    let checked = checked
+                        .into_iter()
+                        .map(|value| self.convert(value, element_ty))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    (element_ty, checked)
+                };
                 Expression {
                     ty: Type::List(element_ty.id()),
                     kind: Kind::List(checked),

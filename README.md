@@ -76,8 +76,9 @@ imports, invalid module paths, and circular `pack` dependencies.
 
 ### Lists
 
-Lists contain values of one type. Their element type is inferred from the first value or can be
-written explicitly for an empty list:
+Lists contain values of one type. Their element type is inferred from all values; compatible
+numeric values are promoted to a shared type. Empty or incompatible lists require an explicit
+type:
 
 ```adamantium
 var numbers = List[1, 2, 3];
