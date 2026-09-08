@@ -33,6 +33,29 @@ fn native_lists_create_read_and_update_elements() {
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_explicit_as_conversions_are_checked() {
+    let output = Project::new(
+        "fun main() { var source=300:i32; var narrow=source.as(i16); print.newline(narrow); var decimal=narrow.as(f64); print.newline(decimal); }",
+    )
+    .run();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"300\r\n300\r\n");
+
+    let overflow = Project::new(
+        "fun main() { var source=300:i32; var narrow=source.as(u8); print.newline(narrow); }",
+    )
+    .run();
+    assert_eq!(overflow.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&overflow.stderr).contains("runtime error"));
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_logic_remainder_warnings_and_optional_values() {
     let output = Project::new(
         r#"

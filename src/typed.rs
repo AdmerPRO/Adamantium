@@ -192,6 +192,7 @@ impl Checker<'_> {
         match expr {
             Expr::Variable(slot) => self.types[*slot],
             Expr::Annotated(_, ty) => Some(*ty),
+            Expr::Cast(_, ty, _) => Some(*ty),
             Expr::Call(call) => self.signatures.get(&call.name).map(|s| s.result),
             Expr::Decimal(_) => Some(Type::F64),
             Expr::String(_) => Some(Type::String),
@@ -390,6 +391,11 @@ impl Checker<'_> {
                 kind: Kind::Variable(*slot),
             },
             Expr::Annotated(value, ty) => self.expression(value, Some(*ty))?,
+            Expr::Cast(value, ty, position) => {
+                let value = self.expression(value, None)?;
+                self.convert(value, *ty)
+                    .map_err(|error| position.error(error))?
+            }
             Expr::Call(call) => {
                 let signature = self.signatures.get(&call.name).ok_or("unknown function")?;
                 let arguments = self.arguments(&call.arguments, &signature.parameters)?;

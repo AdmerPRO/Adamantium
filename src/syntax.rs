@@ -75,6 +75,7 @@ pub enum Expr {
     List(Vec<Expr>),
     Index(Box<Expr>, Box<Expr>, Position),
     Annotated(Box<Expr>, Type),
+    Cast(Box<Expr>, Type, Position),
     Variable(usize),
     Field(Box<Expr>, String, Position),
     MethodCall(Box<Expr>, String, Vec<Expr>, Position),
@@ -654,7 +655,12 @@ impl Parser {
             self.next();
             let position = self.position();
             let member = self.name()?;
-            if self.take(Token::Symbol('(')) {
+            if member == "as" {
+                self.symbol('(')?;
+                let ty = self.type_name()?;
+                self.symbol(')')?;
+                left = Expr::Cast(Box::new(left), ty, position);
+            } else if self.take(Token::Symbol('(')) {
                 if let Expr::Variable(slot) = &left
                     && self
                         .bindings
@@ -1804,9 +1810,11 @@ fn validate_expr(expr: &Expr, signatures: &HashMap<String, (usize, usize)>) -> R
             validate_expr(left, signatures)?;
             validate_expr(right, signatures)
         }
-        Expr::Negate(expr) | Expr::Positive(expr) | Expr::Not(expr) | Expr::Annotated(expr, _) => {
-            validate_expr(expr, signatures)
-        }
+        Expr::Negate(expr)
+        | Expr::Positive(expr)
+        | Expr::Not(expr)
+        | Expr::Annotated(expr, _)
+        | Expr::Cast(expr, _, _) => validate_expr(expr, signatures),
         Expr::Construct(_, fields) => {
             for (_, value) in fields {
                 validate_expr(value, signatures)?;

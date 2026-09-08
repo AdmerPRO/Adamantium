@@ -261,8 +261,8 @@ Implement:
 var a = b.as(i32);
 ```
 
-* [ ] Implement `as(Type)`
-* [x] Implement explicit numeric conversions — numeric type suffixes; `as(Type)` is pending
+* [x] Implement `as(Type)`
+* [x] Implement explicit numeric conversions — numeric type suffixes and `as(Type)`
 * [x] Implement automatic numeric promotion
 * [x] Define safe conversion rules
 * [x] Define narrowing conversion rules

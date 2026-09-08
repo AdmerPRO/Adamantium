@@ -153,9 +153,11 @@ fn visit(expr: &Expr, reads: &mut HashSet<usize>, calls: &mut HashSet<String>) {
             visit(a, reads, calls);
             visit(b, reads, calls);
         }
-        Expr::Negate(expr) | Expr::Positive(expr) | Expr::Not(expr) | Expr::Annotated(expr, _) => {
-            visit(expr, reads, calls)
-        }
+        Expr::Negate(expr)
+        | Expr::Positive(expr)
+        | Expr::Not(expr)
+        | Expr::Annotated(expr, _)
+        | Expr::Cast(expr, _, _) => visit(expr, reads, calls),
         Expr::Construct(_, fields) => {
             for (_, value) in fields {
                 visit(value, reads, calls);

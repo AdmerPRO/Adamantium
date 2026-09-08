@@ -22,6 +22,18 @@ fn lists_are_homogeneous_and_indexed_by_integers() {
     assert!(empty.contains("ambiguous List type"));
 }
 
+#[test]
+fn explicit_as_conversions_are_checked() {
+    let program = checked(
+        "fun main() { var source=300:i32; var narrow=source.as(i16); var decimal=narrow.as(f64); print.newline(decimal); }",
+    )
+    .unwrap();
+    assert_eq!(program.functions[0].types[1], Type::I16);
+    assert_eq!(program.functions[0].types[2], Type::F64);
+    assert!(checked("fun main() { var value=\"10\".as(i32); }").is_err());
+    assert!(checked("fun main() { var value=1.5.as(i32); }").is_err());
+}
+
 fn checked(source: &str) -> Result<Program, String> {
     check(&syntax::parse(source)?)
 }

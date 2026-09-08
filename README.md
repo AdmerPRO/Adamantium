@@ -320,6 +320,17 @@ print.newline(operation(2,3));
 
 ### Arithmetic and assignment
 
+Use `.as(Type)` for an explicit checked numeric conversion:
+
+```adamantium
+var wide = 300:i32;
+var small = wide.as(i16);
+var decimal = small.as(f64);
+```
+
+Conversions that overflow at runtime stop the program with an error. Incompatible conversions are
+rejected by the compiler.
+
 Initializers, assignments, print arguments, and function arguments accept numeric
 expressions. `*`, `/`, and `%` take precedence over `+` and `-`; operators at the same
 precedence are evaluated left to right. Parentheses override precedence.
