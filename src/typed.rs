@@ -93,6 +93,7 @@ pub fn check(program: &syntax::Program) -> Result<Program, String> {
             )
         })
         .collect();
+    validate_operator_methods(program, &signatures)?;
     let mut functions = Vec::new();
     for function in &program.functions {
         let mut checker = Checker {
@@ -134,6 +135,48 @@ pub fn check(program: &syntax::Program) -> Result<Program, String> {
     })
 }
 
+fn validate_operator_methods(
+    program: &syntax::Program,
+    signatures: &HashMap<String, Signature>,
+) -> Result<(), String> {
+    const ARITHMETIC: &[&str] = &["__add__", "__sub__", "__mul__", "__div__"];
+    const COMPARISON: &[&str] = &["__eq__", "__ne__", "__lt__", "__le__", "__gt__", "__ge__"];
+    for class in &program.classes {
+        for method in &class.methods {
+            if !ARITHMETIC.contains(&method.name.as_str())
+                && !COMPARISON.contains(&method.name.as_str())
+            {
+                continue;
+            }
+            if !method.public {
+                return Err(format!("operator method '{}' must be public", method.name));
+            }
+            let signature = &signatures[&method.function];
+            if signature.parameters.len() != 2 || signature.parameters[1] != Type::Class(class.id) {
+                return Err(format!(
+                    "operator method '{}' must accept exactly one required '{}' operand",
+                    method.name, class.name
+                ));
+            }
+            if COMPARISON.contains(&method.name.as_str()) && signature.result != Type::Bool {
+                return Err(format!(
+                    "operator method '{}' must return bool",
+                    method.name
+                ));
+            }
+            if ARITHMETIC.contains(&method.name.as_str())
+                && matches!(signature.result, Type::None | Type::Optional(_))
+            {
+                return Err(format!(
+                    "operator method '{}' must return a non-optional value",
+                    method.name
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn promoted(a: Type, b: Type) -> Result<Type, String> {
     if !a.numeric() || !b.numeric() {
         return Err(format!(
@@ -173,6 +216,34 @@ fn promoted(a: Type, b: Type) -> Result<Type, String> {
 }
 
 impl Checker<'_> {
+    fn operator_call(
+        &self,
+        left: &Expr,
+        right: &Expr,
+        method_name: &str,
+    ) -> Result<Expression, String> {
+        let object = self.expression(left, None)?;
+        let Type::Class(id) = object.ty else {
+            return Err(format!("operator '{method_name}' requires a class value"));
+        };
+        let class = &self.classes[id as usize];
+        let method = class
+            .methods
+            .iter()
+            .find(|method| method.name == method_name)
+            .ok_or_else(|| {
+                format!(
+                    "class '{}' does not implement operator method '{method_name}'",
+                    class.name
+                )
+            })?;
+        let signature = &self.signatures[&method.function];
+        let argument = self.expression(right, Some(Type::Class(id)))?;
+        Ok(Expression {
+            ty: signature.result,
+            kind: Kind::MethodCall(method.function.clone(), Box::new(object), vec![argument]),
+        })
+    }
     fn arguments(
         &self,
         arguments: &[Expr],
@@ -525,52 +596,82 @@ impl Checker<'_> {
                 kind: Kind::Not(Box::new(self.expression(value, Some(Type::Bool))?)),
             },
             Expr::Binary(op, a, b) => {
-                let hint = match (self.hint(a), self.hint(b)) {
-                    (Some(a), Some(b)) => Some(promoted(a, b)?),
-                    (a, b) => a.or(b),
-                };
-                let literal_type = expected.filter(|t| t.numeric()).or(hint);
-                let a = self.expression(a, literal_type)?;
-                let b = self.expression(b, literal_type)?;
-                let ty = promoted(a.ty, b.ty)?;
-                if matches!(op, Operator::Remainder) && !ty.integer() {
-                    return Err("remainder requires integer operands".into());
-                }
-                Expression {
-                    ty,
-                    kind: Kind::Binary(
-                        *op,
-                        Box::new(self.convert(a, ty)?),
-                        Box::new(self.convert(b, ty)?),
-                    ),
-                }
-            }
-            Expr::Compare(comparison, a, b) => {
-                let (a, b) = if self.hint(a).is_some_and(Type::numeric)
-                    || self.hint(b).is_some_and(Type::numeric)
-                {
+                if matches!(self.hint(a), Some(Type::Class(_))) {
+                    let method = match op {
+                        Operator::Add => "__add__",
+                        Operator::Subtract => "__sub__",
+                        Operator::Multiply => "__mul__",
+                        Operator::Divide => "__div__",
+                        Operator::Remainder => {
+                            return Err("class remainder operator is not supported".into());
+                        }
+                    };
+                    self.operator_call(a, b, method)?
+                } else {
                     let hint = match (self.hint(a), self.hint(b)) {
                         (Some(a), Some(b)) => Some(promoted(a, b)?),
                         (a, b) => a.or(b),
                     };
-                    let a = self.expression(a, hint)?;
-                    let b = self.expression(b, hint)?;
+                    let literal_type = expected.filter(|t| t.numeric()).or(hint);
+                    let a = self.expression(a, literal_type)?;
+                    let b = self.expression(b, literal_type)?;
                     let ty = promoted(a.ty, b.ty)?;
-                    (self.convert(a, ty)?, self.convert(b, ty)?)
+                    if matches!(op, Operator::Remainder) && !ty.integer() {
+                        return Err("remainder requires integer operands".into());
+                    }
+                    Expression {
+                        ty,
+                        kind: Kind::Binary(
+                            *op,
+                            Box::new(self.convert(a, ty)?),
+                            Box::new(self.convert(b, ty)?),
+                        ),
+                    }
+                }
+            }
+            Expr::Compare(comparison, a, b) => {
+                if matches!(self.hint(a), Some(Type::Class(_))) {
+                    let method = match comparison {
+                        Comparison::Equal => "__eq__",
+                        Comparison::NotEqual => "__ne__",
+                        Comparison::Less => "__lt__",
+                        Comparison::LessEqual => "__le__",
+                        Comparison::Greater => "__gt__",
+                        Comparison::GreaterEqual => "__ge__",
+                    };
+                    self.operator_call(a, b, method)?
                 } else {
-                    let a = self.expression(a, None)?;
-                    let b = self.expression(b, Some(a.ty))?;
-                    if !matches!(comparison, Comparison::Equal | Comparison::NotEqual) {
-                        return Err(format!("ordering comparison is not supported for {}", a.ty));
+                    let (a, b) = if self.hint(a).is_some_and(Type::numeric)
+                        || self.hint(b).is_some_and(Type::numeric)
+                    {
+                        let hint = match (self.hint(a), self.hint(b)) {
+                            (Some(a), Some(b)) => Some(promoted(a, b)?),
+                            (a, b) => a.or(b),
+                        };
+                        let a = self.expression(a, hint)?;
+                        let b = self.expression(b, hint)?;
+                        let ty = promoted(a.ty, b.ty)?;
+                        (self.convert(a, ty)?, self.convert(b, ty)?)
+                    } else {
+                        let a = self.expression(a, None)?;
+                        let b = self.expression(b, Some(a.ty))?;
+                        if !matches!(comparison, Comparison::Equal | Comparison::NotEqual)
+                            && !a.ty.numeric()
+                        {
+                            return Err(format!(
+                                "ordering comparison is not supported for {}",
+                                a.ty
+                            ));
+                        }
+                        if matches!(a.ty, Type::String | Type::Class(_)) {
+                            return Err(format!("comparison is not supported for {}", a.ty));
+                        }
+                        (a, b)
+                    };
+                    Expression {
+                        ty: Type::Bool,
+                        kind: Kind::Compare(*comparison, Box::new(a), Box::new(b)),
                     }
-                    if matches!(a.ty, Type::String | Type::Class(_)) {
-                        return Err(format!("comparison is not supported for {}", a.ty));
-                    }
-                    (a, b)
-                };
-                Expression {
-                    ty: Type::Bool,
-                    kind: Kind::Compare(*comparison, Box::new(a), Box::new(b)),
                 }
             }
             Expr::Logical(operator, a, b) => Expression {

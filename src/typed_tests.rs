@@ -34,6 +34,37 @@ fn explicit_as_conversions_are_checked() {
     assert!(checked("fun main() { var value=1.5.as(i32); }").is_err());
 }
 
+#[test]
+fn validates_class_operator_overloads() {
+    let methods = r#"
+        pub fun __add__(other:Number) r:int { r=self.value+other.value; }
+        pub fun __sub__(other:Number) r:int { r=self.value-other.value; }
+        pub fun __mul__(other:Number) r:int { r=self.value*other.value; }
+        pub fun __div__(other:Number) r:int { r=self.value/other.value; }
+        pub fun __eq__(other:Number) r:bool { r=self.value==other.value; }
+        pub fun __ne__(other:Number) r:bool { r=self.value!=other.value; }
+        pub fun __lt__(other:Number) r:bool { r=self.value<other.value; }
+        pub fun __le__(other:Number) r:bool { r=self.value<=other.value; }
+        pub fun __gt__(other:Number) r:bool { r=self.value>other.value; }
+        pub fun __ge__(other:Number) r:bool { r=self.value>=other.value; }
+    "#;
+    let source = format!(
+        "class Number(pub value:int){{fun __new__(){{}} {methods}}} fun main(){{var a=Number(value=8);var b=Number(value=2);print.newline(a+b);print.newline(a-b);print.newline(a*b);print.newline(a/b);print.newline(a==b);print.newline(a!=b);print.newline(a<b);print.newline(a<=b);print.newline(a>b);print.newline(a>=b);}}"
+    );
+    let result = checked(&source);
+    assert!(result.is_ok(), "{:?}", result.err());
+    for invalid in [
+        "fun __add__(other:Number) r:int { r=1; }",
+        "pub fun __add__() r:int { r=1; }",
+        "pub fun __add__($other:Number) r:int { r=1; }",
+        "pub fun __eq__(other:Number) r:int { r=1; }",
+    ] {
+        let source =
+            format!("class Number(pub value:int){{fun __new__(){{}} {invalid}}} fun main(){{}}");
+        assert!(checked(&source).is_err(), "accepted {invalid}");
+    }
+}
+
 fn checked(source: &str) -> Result<Program, String> {
     check(&syntax::parse(source)?)
 }

@@ -113,6 +113,35 @@ fn native_explicit_as_conversions_are_checked() {
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_class_operator_overloads() {
+    let source = r#"class Number(pub value:int){
+        fun __new__(){}
+        pub fun __add__(other:Number) r:int{r=self.value+other.value;}
+        pub fun __sub__(other:Number) r:int{r=self.value-other.value;}
+        pub fun __mul__(other:Number) r:int{r=self.value*other.value;}
+        pub fun __div__(other:Number) r:int{r=self.value/other.value;}
+        pub fun __eq__(other:Number) r:bool{r=self.value==other.value;}
+        pub fun __ne__(other:Number) r:bool{r=self.value!=other.value;}
+        pub fun __lt__(other:Number) r:bool{r=self.value<other.value;}
+        pub fun __le__(other:Number) r:bool{r=self.value<=other.value;}
+        pub fun __gt__(other:Number) r:bool{r=self.value>other.value;}
+        pub fun __ge__(other:Number) r:bool{r=self.value>=other.value;}
+    } fun main(){var a=Number(value=8);var b=Number(value=2);print.newline(a+b);print.newline(a-b);print.newline(a*b);print.newline(a/b);print.newline(a==b);print.newline(a!=b);print.newline(a<b);print.newline(a<=b);print.newline(a>b);print.newline(a>=b);}"#;
+    let output = Project::new(source).run();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.stdout,
+        b"10\r\n6\r\n16\r\n4\r\nfalse\r\ntrue\r\nfalse\r\nfalse\r\ntrue\r\ntrue\r\n"
+    );
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_logic_remainder_warnings_and_optional_values() {
     let output = Project::new(
         r#"

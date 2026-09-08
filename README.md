@@ -343,6 +343,27 @@ print.newline(operation(2,3));
 
 ### Arithmetic and assignment
 
+Classes can overload arithmetic and comparison operators with public special methods. Each method
+accepts exactly one required value of the same class. Comparison and equality methods must return
+`bool`:
+
+```adamantium
+class Number(pub value:int) {
+    fun __new__() {}
+
+    pub fun __add__(other:Number) result:int {
+        result = self.value + other.value;
+    }
+
+    pub fun __eq__(other:Number) result:bool {
+        result = self.value == other.value;
+    }
+}
+```
+
+The supported names are `__add__`, `__sub__`, `__mul__`, `__div__`, `__eq__`, `__ne__`,
+`__lt__`, `__le__`, `__gt__`, and `__ge__`.
+
 Use `.as(Type)` for an explicit checked numeric conversion:
 
 ```adamantium

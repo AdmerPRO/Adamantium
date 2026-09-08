@@ -819,15 +819,15 @@ var stc a = 10:i32;
 
 # 32. Operator Overloading
 
-* [ ] Design operator overload syntax
-* [ ] Implement `+`
-* [ ] Implement `-`
-* [ ] Implement `*`
-* [ ] Implement `/`
-* [ ] Implement comparison operators
-* [ ] Implement equality operators
-* [ ] Validate operator implementations
-* [ ] Prevent unsafe operator behavior
+* [x] Design operator overload syntax — public `__add__`, `__sub__`, `__mul__`, `__div__`, `__eq__`, `__ne__`, `__lt__`, `__le__`, `__gt__`, and `__ge__` methods
+* [x] Implement `+`
+* [x] Implement `-`
+* [x] Implement `*`
+* [x] Implement `/`
+* [x] Implement comparison operators
+* [x] Implement equality operators
+* [x] Validate operator implementations
+* [x] Prevent unsafe operator behavior — public methods, one required same-class operand, checked result types
 
 ---
 
