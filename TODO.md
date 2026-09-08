@@ -83,7 +83,7 @@ Executable
 * [x] Implement unused-variable detection — reachable reads of locals and parameters
 * [x] Implement unused-function detection — call graph rooted at `main`, including disconnected cycles
 * [x] Implement invalid-access detection — current names, mutability, calls, methods and unsupported member/index/qualified access
-* [x] Implement invalid-import detection — explicit rejection of `use`/`pack`; module resolution and visibility checks are pending
+* [x] Implement invalid-import detection — missing modules/symbols, conflicts, paths and dependency cycles
 * [x] Implement code generation
 * [x] Implement NASM backend
 * [x] Implement object file generation
@@ -392,13 +392,13 @@ Implement:
 pack utils;
 ```
 
-* [ ] Implement `pack`
-* [ ] Find `.ad` files
-* [ ] Resolve module paths
-* [ ] Implement nested modules
-* [ ] Implement module namespaces
-* [ ] Detect circular module dependencies
-* [ ] Detect missing modules
+* [x] Implement `pack`
+* [x] Find explicitly packed `.ad` files
+* [x] Resolve module paths relative to `code`
+* [x] Implement nested module paths such as `utils/tools`
+* [x] Implement module namespaces and `module:symbol` access
+* [x] Detect circular module dependencies
+* [x] Detect missing modules
 
 Example:
 
@@ -422,12 +422,12 @@ Multiple imports:
 use utils::[dodawanie, odejmowanie];
 ```
 
-* [ ] Implement imports
-* [ ] Implement multiple imports
-* [ ] Implement qualified access
-* [ ] Import only public symbols
-* [ ] Detect duplicate imports
-* [ ] Detect missing symbols
+* [x] Implement imports
+* [x] Implement multiple imports with `module:[a,b]`
+* [x] Implement qualified module access with `module:symbol`
+* [ ] Import only public symbols — top-level visibility is pending
+* [x] Detect duplicate and conflicting imports
+* [x] Detect missing symbols
 
 ---
 
@@ -1257,7 +1257,7 @@ Create the official standard library.
 * [x] AST tests
 * [x] Type checker tests
 * [x] Semantic analysis tests
-* [ ] Module tests
+* [x] Module tests — namespaces, qualified calls, use imports and nested files
 * [x] Class tests — parsing, typing, visibility, construction, mutation and native copying
 * [x] Enum tests
 * [ ] Alias tests
@@ -1389,7 +1389,7 @@ The recommended implementation order is:
 11. [x] `while`
 12. [x] `until`
 13. [x] `loop`
-14. [ ] Modules / `pack` / `use`
+14. [x] Modules / `pack` / `use`
 15. [x] Classes
 16. [x] Enums
 17. [ ] Memory-safety model

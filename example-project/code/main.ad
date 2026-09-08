@@ -3,6 +3,10 @@
     Block comments can span multiple lines.
 */
 
+pack utils;
+pack utils/tools;
+use utils:[module_add];
+
 enum Status {
     ready,
     running,
@@ -25,6 +29,9 @@ class Counter(
 }
 
 fun main() {
+    print.newline(utils:module_add(2,3));
+    print.newline(module_add(4,5));
+    print.newline(utils/tools:module_multiply(3,4));
     // print.sameline does not append a newline.
     print.sameline("Hello, ");
     print.newline("Adamantium!");

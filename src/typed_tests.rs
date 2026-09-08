@@ -6,7 +6,22 @@ fn checked(source: &str) -> Result<Program, String> {
 
 #[test]
 fn complete_example_project_stays_valid() {
-    checked(include_str!("../example-project/code/main.ad")).unwrap();
+    let syntax = syntax::parse_modules(&[
+        (
+            "utils".into(),
+            include_str!("../example-project/code/utils.ad").into(),
+        ),
+        (
+            "utils/tools".into(),
+            include_str!("../example-project/code/utils/tools.ad").into(),
+        ),
+        (
+            "".into(),
+            include_str!("../example-project/code/main.ad").into(),
+        ),
+    ])
+    .unwrap();
+    check(&syntax).unwrap();
 }
 
 #[test]

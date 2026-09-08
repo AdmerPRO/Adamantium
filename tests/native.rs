@@ -118,6 +118,54 @@ fn native_optional_enums_methods_and_matching() {
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_multifile_pack_qualified_calls_and_use_imports() {
+    let project = Project::new(
+        r#"
+        pack utils;
+        pack utils/tools;
+        use utils:[add,Choice,Box];
+        fun main() {
+            print.newline(utils:add(2,3));
+            print.newline(add(4,5));
+            print.newline(utils/tools:calculate(6));
+            var choice=Choice.second;
+            print.newline(choice);
+            var object=Box(value=7);
+            print.newline(object.value);
+        }
+    "#,
+    );
+    fs::create_dir_all(project.0.join("code/utils")).unwrap();
+    fs::write(
+        project.0.join("code/utils.ad"),
+        r#"
+        enum Choice { first, second }
+        class Box(pub value:int) { fun __new__() {} }
+        fun add(a:int,b:int) result:int { result=a+b; }
+    "#,
+    )
+    .unwrap();
+    fs::write(
+        project.0.join("code/utils/tools.ad"),
+        r#"
+        pack utils;
+        use utils:[add];
+        fun calculate(value:int) result:int { result=add(value,10); }
+    "#,
+    )
+    .unwrap();
+    let output = project.run();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"5\r\n9\r\n16\r\n1\r\n7\r\n");
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_value_and_function_aliases() {
     let output = Project::new(
         r#"

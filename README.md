@@ -39,6 +39,41 @@ from `project.toml`. On Windows, the compiler finds Visual Studio with
 `vswhere` and configures the x64 linker automatically, so these commands work
 from regular PowerShell and Command Prompt sessions.
 
+### Modules, pack, and use
+
+Adamantium projects may contain multiple `.ad` files under `code`. Load a module
+with `pack`; the module path is relative to `code` and omits the `.ad` extension.
+
+```text
+// code/main.ad
+pack utils;
+pack utils/tools;
+
+fun main() {
+    utils:calculate();
+    utils/tools:run_tool();
+}
+```
+
+This loads `code/utils.ad` and `code/utils/tools.ad`. A loaded module keeps its
+own namespace. Use a colon to access its functions, enums, and classes. To bring
+selected symbols into the current module, use a list:
+
+```text
+pack utils;
+use utils:[calculate,Status,Counter];
+
+fun main() {
+    calculate();
+    var status = Status.ready;
+    var counter = Counter(value=1);
+}
+```
+
+Every module explicitly declares its own `pack` dependencies and `use` imports.
+The compiler reports missing module files, unknown imported symbols, conflicting
+imports, invalid module paths, and circular `pack` dependencies.
+
 Set `ADAMANTIUM_NASM` or `ADAMANTIUM_LINKER` to override a tool's executable
 path. A custom linker must support Microsoft LINK arguments and have access to
 `kernel32.lib` through its environment.

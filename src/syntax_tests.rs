@@ -449,3 +449,32 @@ fn parses_value_and_symbol_aliases() {
     );
     assert!(parse("fun main() { var alias=missing().as_variable; }").is_err());
 }
+
+#[test]
+fn combines_namespaced_modules_and_use_imports() {
+    let files = vec![
+        ("utils".into(), "fun value(a:int) r:int { r=a+1; } fun other() r:int { r=2; } enum State { ready }".into()),
+        ("utils/tools".into(), "pack utils; use utils:[value]; fun calculate() r:int { r=value(4); }".into()),
+        ("".into(), "pack utils; pack utils/tools; use utils:[value]; fun main() { print.newline(utils:value(1)); print.newline(value(2)); print.newline(utils/tools:calculate()); var state=utils:State.ready; }".into()),
+    ];
+    let program = parse_modules(&files).unwrap();
+    assert!(
+        program
+            .functions
+            .iter()
+            .any(|function| function.name == "admod__utils__value")
+    );
+    assert!(
+        program
+            .functions
+            .iter()
+            .any(|function| function.name == "admod__utils__tools__calculate")
+    );
+
+    let missing = vec![("".into(), "use utils:[missing]; fun main() {}".into())];
+    assert!(
+        parse_modules(&missing)
+            .unwrap_err()
+            .contains("does not export")
+    );
+}

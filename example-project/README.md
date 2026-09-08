@@ -3,6 +3,8 @@
 This project demonstrates every currently supported Adamantium language feature.
 This includes comparisons, `if`/`else`, `for`, `while`, `until`, `loop`,
 `break`, and `continue`.
+It also demonstrates multiple source files through `pack`, qualified module
+calls, nested module paths, and selective `use` imports.
 Run it from the compiler repository on Windows with NASM and the Visual Studio
 C++ build tools installed:
 

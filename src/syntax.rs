@@ -1,5 +1,5 @@
 use crate::types::Type;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[cfg(test)]
 #[path = "syntax_tests.rs"]
@@ -1321,8 +1321,254 @@ impl Parser {
     }
 }
 
-pub fn parse(source: &str) -> Result<Program, String> {
+pub fn module_dependencies(source: &str) -> Result<Vec<String>, String> {
     let tokens = lex(source)?;
+    let mut dependencies = Vec::new();
+    let mut index = 0;
+    let mut depth = 0;
+    while index < tokens.len() {
+        match &tokens[index].0 {
+            Token::Symbol('{') => depth += 1,
+            Token::Symbol('}') => depth -= 1,
+            Token::Word(word) if word == "pack" && depth == 0 => {
+                let position = tokens[index].1;
+                index += 1;
+                let mut parts = Vec::new();
+                loop {
+                    let Some((Token::Word(part), _)) = tokens.get(index) else {
+                        return Err(position.error("expected module path after 'pack'"));
+                    };
+                    parts.push(part.clone());
+                    index += 1;
+                    if !matches!(tokens.get(index), Some((Token::Symbol('/'), _))) {
+                        break;
+                    }
+                    index += 1;
+                }
+                if !matches!(tokens.get(index), Some((Token::Symbol(';'), _))) {
+                    return Err(position.error("expected ';' after module path"));
+                }
+                dependencies.push(parts.join("/"));
+            }
+            _ => (),
+        }
+        index += 1;
+    }
+    Ok(dependencies)
+}
+
+#[derive(Clone, Copy)]
+enum ExportKind {
+    Function,
+    Enum,
+    Class,
+}
+
+fn module_prefix(module: &str) -> String {
+    format!("admod__{}__", module.replace('/', "__"))
+}
+
+pub fn parse_modules(files: &[(String, String)]) -> Result<Program, String> {
+    let mut token_files = Vec::new();
+    let mut exports = HashMap::new();
+    for (module, source) in files {
+        let tokens = lex(source)?;
+        let mut depth = 0;
+        for index in 0..tokens.len().saturating_sub(1) {
+            match &tokens[index].0 {
+                Token::Symbol('{') => depth += 1,
+                Token::Symbol('}') => depth -= 1,
+                Token::Word(keyword)
+                    if depth == 0 && matches!(keyword.as_str(), "fun" | "enum" | "class") =>
+                {
+                    if let Token::Word(name) = &tokens[index + 1].0 {
+                        let kind = match keyword.as_str() {
+                            "fun" => ExportKind::Function,
+                            "enum" => ExportKind::Enum,
+                            _ => ExportKind::Class,
+                        };
+                        let canonical = if module.is_empty() {
+                            name.clone()
+                        } else {
+                            format!("{}{name}", module_prefix(module))
+                        };
+                        if exports
+                            .insert((module.clone(), name.clone()), (canonical, kind))
+                            .is_some()
+                        {
+                            return Err(tokens[index + 1].1.error(format!(
+                                "'{name}' is declared twice in module '{module}'"
+                            )));
+                        }
+                    }
+                }
+                _ => (),
+            }
+        }
+        token_files.push((module, tokens));
+    }
+
+    let mut combined = Vec::new();
+    for (module, tokens) in token_files {
+        let local = exports
+            .iter()
+            .filter(|((owner, _), _)| owner == module)
+            .map(|((_, name), value)| (name.clone(), value.clone()))
+            .collect::<HashMap<_, _>>();
+        let mut imports = HashMap::new();
+        let mut removed = HashSet::new();
+        let mut index = 0;
+        let mut depth = 0;
+        while index < tokens.len() {
+            match &tokens[index].0 {
+                Token::Symbol('{') => depth += 1,
+                Token::Symbol('}') => depth -= 1,
+                Token::Word(keyword) if depth == 0 && keyword == "pack" => {
+                    while index < tokens.len() && tokens[index].0 != Token::Symbol(';') {
+                        removed.insert(index);
+                        index += 1;
+                    }
+                    removed.insert(index);
+                }
+                Token::Word(keyword) if depth == 0 && keyword == "use" => {
+                    let start = index;
+                    index += 1;
+                    let mut parts = Vec::new();
+                    loop {
+                        let Some((Token::Word(part), position)) = tokens.get(index) else {
+                            return Err(tokens[start].1.error("expected module path after 'use'"));
+                        };
+                        let _ = position;
+                        parts.push(part.clone());
+                        index += 1;
+                        if !matches!(tokens.get(index), Some((Token::Symbol('/'), _))) {
+                            break;
+                        }
+                        index += 1;
+                    }
+                    if !matches!(tokens.get(index), Some((Token::Symbol(':'), _)))
+                        || !matches!(tokens.get(index + 1), Some((Token::Symbol('['), _)))
+                    {
+                        return Err(tokens[start].1.error("expected ':[' after module path"));
+                    }
+                    index += 2;
+                    loop {
+                        let Some((Token::Word(name), position)) = tokens.get(index) else {
+                            return Err(tokens[start].1.error("expected imported symbol name"));
+                        };
+                        let path = parts.join("/");
+                        let exported = exports
+                            .get(&(path.clone(), name.clone()))
+                            .cloned()
+                            .ok_or_else(|| {
+                                position.error(format!("module '{path}' does not export '{name}'"))
+                            })?;
+                        if local.contains_key(name)
+                            || imports.insert(name.clone(), exported).is_some()
+                        {
+                            return Err(position.error(format!(
+                                "imported name '{name}' conflicts with another name"
+                            )));
+                        }
+                        index += 1;
+                        if matches!(tokens.get(index), Some((Token::Symbol(']'), _))) {
+                            index += 1;
+                            break;
+                        }
+                        if !matches!(tokens.get(index), Some((Token::Symbol(','), _))) {
+                            return Err(tokens[index].1.error("expected ',' or ']' in use list"));
+                        }
+                        index += 1;
+                    }
+                    if !matches!(tokens.get(index), Some((Token::Symbol(';'), _))) {
+                        return Err(tokens[start].1.error("expected ';' after use declaration"));
+                    }
+                    for removed_index in start..=index {
+                        removed.insert(removed_index);
+                    }
+                }
+                _ => (),
+            }
+            index += 1;
+        }
+
+        let mut index = 0;
+        let mut depth = 0;
+        while index < tokens.len() {
+            if removed.contains(&index) {
+                index += 1;
+                continue;
+            }
+            if tokens[index].0 == Token::End {
+                break;
+            }
+            let position = tokens[index].1;
+            if let Token::Word(first) = &tokens[index].0 {
+                let mut path_parts = vec![first.clone()];
+                let mut cursor = index + 1;
+                while matches!(tokens.get(cursor), Some((Token::Symbol('/'), _)))
+                    && matches!(tokens.get(cursor + 1), Some((Token::Word(_), _)))
+                {
+                    if let Token::Word(part) = &tokens[cursor + 1].0 {
+                        path_parts.push(part.clone());
+                    }
+                    cursor += 2;
+                }
+                if matches!(tokens.get(cursor), Some((Token::Symbol(':'), _)))
+                    && let Some((Token::Word(name), _)) = tokens.get(cursor + 1)
+                    && let Some((canonical, _)) = exports.get(&(path_parts.join("/"), name.clone()))
+                {
+                    combined.push((Token::Word(canonical.clone()), position));
+                    index = cursor + 2;
+                    continue;
+                }
+            }
+            let mut token = tokens[index].0.clone();
+            if let Token::Word(name) = &token
+                && let Some((canonical, kind)) = local.get(name).or_else(|| imports.get(name))
+            {
+                let declaration = depth == 0
+                    && index > 0
+                    && matches!(&tokens[index - 1].0, Token::Word(word) if matches!(word.as_str(), "fun" | "enum" | "class"));
+                let next = tokens.get(index + 1).map(|value| &value.0);
+                let previous = index
+                    .checked_sub(1)
+                    .and_then(|i| tokens.get(i))
+                    .map(|value| &value.0);
+                let reference = match kind {
+                    ExportKind::Function => matches!(next, Some(Token::Symbol('('))),
+                    ExportKind::Enum => {
+                        matches!(next, Some(Token::Symbol('.')))
+                            || matches!(previous, Some(Token::Symbol(':')))
+                    }
+                    ExportKind::Class => {
+                        matches!(next, Some(Token::Symbol('(')))
+                            || matches!(previous, Some(Token::Symbol(':')))
+                    }
+                };
+                if declaration || reference {
+                    token = Token::Word(canonical.clone());
+                }
+            }
+            match token {
+                Token::Symbol('{') => depth += 1,
+                Token::Symbol('}') => depth -= 1,
+                _ => (),
+            }
+            combined.push((token, position));
+            index += 1;
+        }
+    }
+    combined.push((Token::End, Position { line: 1, column: 1 }));
+    parse_tokens(combined)
+}
+
+#[cfg(test)]
+pub fn parse(source: &str) -> Result<Program, String> {
+    parse_tokens(lex(source)?)
+}
+
+fn parse_tokens(tokens: Vec<(Token, Position)>) -> Result<Program, String> {
     let mut parser = Parser {
         tokens,
         cursor: 0,

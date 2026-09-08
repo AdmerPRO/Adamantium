@@ -7,6 +7,7 @@ mod typed;
 mod types;
 
 use std::{
+    collections::HashSet,
     env,
     ffi::OsString,
     fs,
@@ -210,9 +211,9 @@ fn build(root: &Path) -> Result<PathBuf, String> {
         }
     }
     let source_path = root.join("code/main.ad");
-    let source =
-        fs::read_to_string(&source_path).map_err(|e| format!("{}: {e}", source_path.display()))?;
-    let parsed = syntax::parse(&source).map_err(|e| format!("{}:{e}", source_path.display()))?;
+    let sources = load_modules(&root.join("code"))?;
+    let parsed =
+        syntax::parse_modules(&sources).map_err(|e| format!("{}:{e}", source_path.display()))?;
     let statements = typed::check(&parsed).map_err(|e| format!("{}:{e}", source_path.display()))?;
     for warning in diagnostics::warnings(&parsed) {
         eprintln!("{}:{warning}", source_path.display());
@@ -253,6 +254,62 @@ fn build(root: &Path) -> Result<PathBuf, String> {
     )?;
     link(&target, name, &obj, &runtime, &exe)?;
     Ok(exe)
+}
+
+fn load_modules(code: &Path) -> Result<Vec<(String, String)>, String> {
+    fn visit(
+        module: &str,
+        code: &Path,
+        visiting: &mut Vec<String>,
+        loaded: &mut HashSet<String>,
+        result: &mut Vec<(String, String)>,
+    ) -> Result<(), String> {
+        if loaded.contains(module) {
+            return Ok(());
+        }
+        if let Some(start) = visiting.iter().position(|item| item == module) {
+            let mut cycle = visiting[start..].to_vec();
+            cycle.push(module.to_string());
+            return Err(format!("circular pack dependency: {}", cycle.join(" -> ")));
+        }
+        if !module.is_empty()
+            && !module.split('/').all(|part| {
+                let mut chars = part.chars();
+                chars
+                    .next()
+                    .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+                    && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+            })
+        {
+            return Err(format!("invalid module path '{module}'"));
+        }
+        let path = if module.is_empty() {
+            code.join("main.ad")
+        } else {
+            code.join(format!("{module}.ad"))
+        };
+        let source = fs::read_to_string(&path).map_err(|error| {
+            format!(
+                "could not load module '{}': {}: {error}",
+                if module.is_empty() { "main" } else { module },
+                path.display()
+            )
+        })?;
+        visiting.push(module.to_string());
+        for dependency in syntax::module_dependencies(&source)
+            .map_err(|error| format!("{}:{error}", path.display()))?
+        {
+            visit(&dependency, code, visiting, loaded, result)?;
+        }
+        visiting.pop();
+        loaded.insert(module.to_string());
+        result.push((module.to_string(), source));
+        Ok(())
+    }
+
+    let mut result = Vec::new();
+    visit("", code, &mut Vec::new(), &mut HashSet::new(), &mut result)?;
+    Ok(result)
 }
 
 fn link(target: &Path, name: &str, obj: &Path, runtime: &Path, exe: &Path) -> Result<(), String> {
