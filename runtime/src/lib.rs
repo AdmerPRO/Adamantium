@@ -20,6 +20,12 @@ pub unsafe extern "C" fn ad_object_clone(source: *const Value, field_count: usiz
     Box::into_raw(fields.to_vec().into_boxed_slice()) as *mut Value
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn ad_list_error(index: usize, length: usize) -> u32 {
+    eprintln!("Adamantium runtime error: List index {index} is out of bounds for length {length}");
+    2
+}
+
 #[repr(C)]
 pub struct Request {
     pub a: Value,

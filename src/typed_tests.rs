@@ -1,5 +1,16 @@
 use super::*;
 
+#[test]
+fn lists_are_homogeneous_and_indexed_by_integers() {
+    assert!(
+        checked("fun main() { var values=List[1,2,3]; values[1]=9; print.newline(values[1]); }")
+            .is_ok()
+    );
+    assert!(checked("fun main() { var values=List[]:List[int]; }").is_ok());
+    assert!(checked("fun main() { var values=List[1,\"wrong\"]; }").is_err());
+    assert!(checked("fun main() { var values=List[]; }").is_err());
+}
+
 fn checked(source: &str) -> Result<Program, String> {
     check(&syntax::parse(source)?)
 }

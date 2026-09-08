@@ -51,11 +51,15 @@ impl Generator {
         slot
     }
     fn clone_class(&mut self, ty: Type) {
-        if let Type::Class(id) = ty {
-            self.emit(format!(
+        match ty {
+            Type::Class(id) => self.emit(format!(
                 "    mov rcx, rax\n    mov edx, {}\n    call ad_object_clone\n    xor edx, edx",
                 self.class_sizes[id as usize]
-            ));
+            )),
+            Type::List(_) => self.emit(
+                "    sub rsp, 16\n    mov [rsp], rdx\n    mov rcx, rax\n    call ad_object_clone\n    mov rdx, [rsp]\n    add rsp, 16",
+            ),
+            _ => (),
         }
     }
     fn call(&mut self, name: &str, arguments: &[Expression]) {
@@ -148,6 +152,48 @@ impl Generator {
                 self.load(object);
                 self.next_slot = mark;
                 let _ = id;
+            }
+            Kind::List(values) => {
+                let mark = self.next_slot;
+                let mut elements = Vec::new();
+                for value in values {
+                    self.expression(value);
+                    self.clone_class(value.ty);
+                    elements.push(self.save());
+                }
+                self.emit(format!(
+                    "    mov ecx, {}\n    call ad_object_new",
+                    values.len()
+                ));
+                let list = self.save();
+                for (index, element) in elements.iter().enumerate() {
+                    self.load(list);
+                    self.emit("    mov r11, rax");
+                    self.load(*element);
+                    self.emit(format!(
+                        "    mov [r11 + {}], rax\n    mov [r11 + {}], rdx",
+                        index * 16,
+                        index * 16 + 8
+                    ));
+                }
+                self.load(list);
+                self.emit(format!("    mov rdx, {}", values.len()));
+                self.next_slot = mark;
+            }
+            Kind::Index(list, index) => {
+                let mark = self.next_slot;
+                self.expression(list);
+                let list = self.save();
+                self.expression(index);
+                let index = self.save();
+                self.emit_list_bounds(list, index);
+                self.load(list);
+                self.emit("    mov r11, rax");
+                self.load(index);
+                self.emit(
+                    "    shl rax, 4\n    add r11, rax\n    mov rax, [r11]\n    mov rdx, [r11 + 8]",
+                );
+                self.next_slot = mark;
             }
             Kind::Field(object, index) => {
                 self.expression(object);
@@ -296,6 +342,22 @@ impl Generator {
                         index * 16 + 8
                     ));
                 }
+                Instruction::SetIndex(list, index, value) => {
+                    self.expression(list);
+                    let list = self.save();
+                    self.expression(index);
+                    let index = self.save();
+                    self.expression(value);
+                    self.clone_class(value.ty);
+                    let value = self.save();
+                    self.emit_list_bounds(list, index);
+                    self.load(list);
+                    self.emit("    mov r11, rax");
+                    self.load(index);
+                    self.emit("    shl rax, 4\n    add r11, rax");
+                    self.load(value);
+                    self.emit("    mov [r11], rax\n    mov [r11 + 8], rdx");
+                }
                 Instruction::If(condition, yes, no) => {
                     let else_label = self.label("else");
                     let end = self.label("if_end");
@@ -420,6 +482,15 @@ impl Generator {
         if size != 0 {
             self.emit(format!("    add rsp, {size}"));
         }
+    }
+    fn emit_list_bounds(&mut self, list: usize, index: usize) {
+        let valid = self.label("list_index_valid");
+        self.load(index);
+        self.emit(format!("    cmp rax, {}\n    jb {valid}", memory(list, 8)));
+        self.emit(format!(
+            "    mov rcx, rax\n    mov rdx, {}\n    call ad_list_error\n    jmp ad_exit_error\n{valid}:",
+            memory(list, 8)
+        ));
     }
 }
 pub fn assembly(program: &Program) -> String {

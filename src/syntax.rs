@@ -72,6 +72,8 @@ pub enum Expr {
     None,
     EnumVariant(Type, u32),
     Construct(u32, Vec<(String, Expr)>),
+    List(Vec<Expr>),
+    Index(Box<Expr>, Box<Expr>, Position),
     Annotated(Box<Expr>, Type),
     Variable(usize),
     Field(Box<Expr>, String, Position),
@@ -99,6 +101,7 @@ pub enum Statement {
     Print(Expr, bool),
     Call(Call),
     SetField(Expr, String, Expr),
+    SetIndex(Expr, Expr, Expr),
     MethodCall(Expr),
     Message(Expr, bool, Position),
     If(Expr, Vec<Statement>, Vec<Statement>),
@@ -476,6 +479,12 @@ impl Parser {
         let Token::Word(name) = self.next() else {
             return Err(position.error("expected a type name"));
         };
+        if name == "List" {
+            self.symbol('[')?;
+            let element = self.type_name()?;
+            self.symbol(']')?;
+            return Ok(Type::List(element.id()));
+        }
         Type::parse(&name)
             .or_else(|| self.enums.get(&name).map(|definition| definition.ty))
             .or_else(|| {
@@ -529,6 +538,20 @@ impl Parser {
                 Expr::Bool(value == "true")
             }
             Token::Word(value) if value == "None" => Expr::None,
+            Token::Word(value) if value == "List" => {
+                self.symbol('[')?;
+                let mut values = Vec::new();
+                if !self.take(Token::Symbol(']')) {
+                    loop {
+                        values.push(self.expression(0)?);
+                        if self.take(Token::Symbol(']')) {
+                            break;
+                        }
+                        self.symbol(',')?;
+                    }
+                }
+                Expr::List(values)
+            }
             Token::Symbol('-') => {
                 // Read the negative magnitude directly to allow i64::MIN.
                 if let Token::Number(value) = self.peek() {
@@ -603,6 +626,12 @@ impl Parser {
         self.expression_tail(left, min_precedence)
     }
     fn expression_tail(&mut self, mut left: Expr, min_precedence: u8) -> Result<Expr, String> {
+        while self.take(Token::Symbol('[')) {
+            let position = self.position();
+            let index = self.expression(0)?;
+            self.symbol(']')?;
+            left = Expr::Index(Box::new(left), Box::new(index), position);
+        }
         while self.peek() == &Token::Symbol('.')
             && self
                 .tokens
@@ -709,11 +738,6 @@ impl Parser {
         }
         if min_precedence == 0 && self.take(Token::Symbol(':')) {
             left = Expr::Annotated(Box::new(left), self.type_name()?);
-        }
-        if matches!(self.peek(), Token::Symbol('[')) {
-            return Err(self
-                .position()
-                .error("invalid access: indexing is not supported"));
         }
         Ok(left)
     }
@@ -875,6 +899,13 @@ impl Parser {
                         self.symbol_aliases.insert(name, target);
                         Statement::Noop(function)
                     }
+                } else if self.peek() == &Token::Symbol('[') {
+                    let slot = self.writable_variable(&name, position)?;
+                    self.next();
+                    let index = self.expression(0)?;
+                    self.symbol(']')?;
+                    self.symbol('=')?;
+                    Statement::SetIndex(Expr::Variable(slot), index, self.expression(0)?)
                 } else if self.peek() == &Token::Symbol('(') {
                     Statement::Call(self.arguments(name, position)?)
                 } else if self.take(Token::Symbol('.')) {

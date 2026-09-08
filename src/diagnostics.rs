@@ -40,6 +40,11 @@ pub fn warnings(program: &Program) -> Vec<String> {
                     visit(object, &mut reads, &mut calls);
                     visit(value, &mut reads, &mut calls);
                 }
+                Statement::SetIndex(list, index, value) => {
+                    visit(list, &mut reads, &mut calls);
+                    visit(index, &mut reads, &mut calls);
+                    visit(value, &mut reads, &mut calls);
+                }
                 Statement::MethodCall(expr) => visit(expr, &mut reads, &mut calls),
                 Statement::If(condition, yes, no) => {
                     visit(condition, &mut reads, &mut calls);
@@ -156,6 +161,15 @@ fn visit(expr: &Expr, reads: &mut HashSet<usize>, calls: &mut HashSet<String>) {
                 visit(value, reads, calls);
             }
         }
+        Expr::List(values) => {
+            for value in values {
+                visit(value, reads, calls);
+            }
+        }
+        Expr::Index(list, index, _) => {
+            visit(list, reads, calls);
+            visit(index, reads, calls);
+        }
         Expr::Field(object, _, _) => visit(object, reads, calls),
         Expr::MethodCall(object, _, arguments, _) => {
             visit(object, reads, calls);
@@ -193,6 +207,11 @@ fn visit_statement(
         Statement::Call(call) => visit_call(call, reads, calls),
         Statement::SetField(object, _, value) => {
             visit(object, reads, calls);
+            visit(value, reads, calls);
+        }
+        Statement::SetIndex(list, index, value) => {
+            visit(list, reads, calls);
+            visit(index, reads, calls);
             visit(value, reads, calls);
         }
         Statement::If(condition, yes, no) => {

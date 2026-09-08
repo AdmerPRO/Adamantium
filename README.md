@@ -74,6 +74,21 @@ Every module explicitly declares its own `pack` dependencies and `use` imports.
 The compiler reports missing module files, unknown imported symbols, conflicting
 imports, invalid module paths, and circular `pack` dependencies.
 
+### Lists
+
+Lists contain values of one type. Their element type is inferred from the first value or can be
+written explicitly for an empty list:
+
+```adamantium
+var numbers = List[1, 2, 3];
+numbers[1] = 10;
+print.newline(numbers[1]);
+
+var empty = List[]:List[int];
+```
+
+Indexing is checked at runtime. Assigning a list to another variable creates an independent copy.
+
 Set `ADAMANTIUM_NASM` or `ADAMANTIUM_LINKER` to override a tool's executable
 path. A custom linker must support Microsoft LINK arguments and have access to
 `kernel32.lib` through its environment.

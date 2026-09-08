@@ -11,6 +11,28 @@ static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_lists_create_read_and_update_elements() {
+    let output = Project::new(
+        "fun main() { var values=List[1,2,3]; print.newline(values[0]); values[1]=9; print.newline(values[1]); var copy=values; copy[0]=7; print.newline(values[0]); print.newline(copy[0]); }",
+    ).run();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"1\r\n9\r\n1\r\n7\r\n");
+
+    let output = Project::new("fun main() { var values=List[1]; print.newline(values[1]); }").run();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("List index 1 is out of bounds for length 1")
+    );
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_logic_remainder_warnings_and_optional_values() {
     let output = Project::new(
         r#"

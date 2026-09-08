@@ -29,6 +29,9 @@ class Counter(
 }
 
 fun main() {
+    var numbers = List[1, 2, 3];
+    numbers[1] = 20;
+    print.newline(numbers[1]);
     print.newline(utils:module_add(2,3));
     print.newline(module_add(4,5));
     print.newline(utils/tools:module_multiply(3,4));

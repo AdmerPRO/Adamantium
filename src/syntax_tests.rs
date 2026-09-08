@@ -478,3 +478,16 @@ fn combines_namespaced_modules_and_use_imports() {
             .contains("does not export")
     );
 }
+
+#[test]
+fn parses_list_literals_indexing_and_assignment() {
+    let statements = main_statements(
+        "fun main() { var values = List[1, 2, 3]; values[1] = 9; print.newline(values[1]); }",
+    );
+    assert!(matches!(statements[0], Statement::Assign(_, Expr::List(_))));
+    assert!(matches!(statements[1], Statement::SetIndex(_, _, _)));
+    assert!(matches!(
+        statements[2],
+        Statement::Print(Expr::Index(_, _, _), true)
+    ));
+}

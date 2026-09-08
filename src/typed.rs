@@ -23,6 +23,8 @@ pub enum Kind {
     Convert(Box<Expression>),
     Call(String, Vec<Expression>),
     Construct(u32, Vec<Expression>, String),
+    List(Vec<Expression>),
+    Index(Box<Expression>, Box<Expression>),
     Field(Box<Expression>, usize),
     MethodCall(String, Box<Expression>, Vec<Expression>),
 }
@@ -34,6 +36,7 @@ pub enum Instruction {
     Print(Expression, bool),
     Call(Expression),
     SetField(Expression, usize, Expression),
+    SetIndex(Expression, Expression, Expression),
     Message(Expression, bool, usize),
     If(Expression, Vec<Instruction>, Vec<Instruction>),
     While(Expression, Vec<Instruction>),
@@ -196,6 +199,14 @@ impl Checker<'_> {
             Expr::None => Some(Type::None),
             Expr::EnumVariant(ty, _) => Some(*ty),
             Expr::Construct(id, _) => Some(Type::Class(*id)),
+            Expr::List(values) => values
+                .first()
+                .and_then(|value| self.hint(value))
+                .map(|ty| Type::List(ty.id())),
+            Expr::Index(list, _, _) => self.hint(list).and_then(|ty| match ty {
+                Type::List(inner) => Type::from_id(inner),
+                _ => None,
+            }),
             Expr::Field(_, _, _) | Expr::MethodCall(_, _, _, _) => None,
             Expr::Negate(e) | Expr::Positive(e) => self.hint(e),
             Expr::Not(_) | Expr::Logical(_, _, _) => Some(Type::Bool),
@@ -313,6 +324,51 @@ impl Checker<'_> {
                 Expression {
                     ty: Type::Class(*id),
                     kind: Kind::Construct(*id, fields, format!("{}____new__", class.name)),
+                }
+            }
+            Expr::List(values) => {
+                let expected_element = expected.and_then(|ty| match ty {
+                    Type::List(inner) => Type::from_id(inner),
+                    _ => None,
+                });
+                let mut checked = Vec::with_capacity(values.len());
+                let element_ty = if let Some(element_ty) = expected_element {
+                    element_ty
+                } else if let Some(first) = values.first() {
+                    let first = self.expression(first, None)?;
+                    let element_ty = first.ty;
+                    checked.push(first);
+                    element_ty
+                } else {
+                    return Err(
+                        "empty List requires an explicit type, for example List[]:List[int]".into(),
+                    );
+                };
+                checked.extend(
+                    values[checked.len()..]
+                        .iter()
+                        .map(|value| self.expression(value, Some(element_ty)))
+                        .collect::<Result<Vec<_>, _>>()?,
+                );
+                Expression {
+                    ty: Type::List(element_ty.id()),
+                    kind: Kind::List(checked),
+                }
+            }
+            Expr::Index(list, index, position) => {
+                let list = self.expression(list, None)?;
+                let Type::List(inner) = list.ty else {
+                    return Err(
+                        position.error(format!("invalid access: {} cannot be indexed", list.ty))
+                    );
+                };
+                let element_ty = Type::from_id(inner).ok_or("invalid List element type")?;
+                Expression {
+                    ty: element_ty,
+                    kind: Kind::Index(
+                        Box::new(list),
+                        Box::new(self.expression(index, Some(Type::U64))?),
+                    ),
                 }
             }
             Expr::Variable(slot) => Expression {
@@ -548,6 +604,18 @@ impl Checker<'_> {
                     return Err(format!("invalid access: field '{field_name}' is private"));
                 }
                 Instruction::SetField(object, index, self.expression(value, Some(field.ty))?)
+            }
+            Statement::SetIndex(list, index, value) => {
+                let list = self.expression(list, None)?;
+                let Type::List(inner) = list.ty else {
+                    return Err(format!("invalid access: {} cannot be indexed", list.ty));
+                };
+                let element_ty = Type::from_id(inner).ok_or("invalid List element type")?;
+                Instruction::SetIndex(
+                    list,
+                    self.expression(index, Some(Type::U64))?,
+                    self.expression(value, Some(element_ty))?,
+                )
             }
             Statement::MethodCall(expr) => Instruction::Call(self.expression(expr, None)?),
             Statement::If(condition, yes, no) => Instruction::If(

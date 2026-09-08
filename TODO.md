@@ -215,7 +215,7 @@ Implement:
 * [x] `bool`
 * [x] `None`
 * [ ] `offset`
-* [ ] `List`
+* [x] `List` — homogeneous literals, explicit element types, indexing and element assignment
 * [x] `enum` — named variants with distinct inferred types
 * [x] `class` — required typed fields, methods, construction and value copying
 * [ ] `fun`

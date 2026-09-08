@@ -23,6 +23,7 @@ pub enum Type {
     Enum(u32),
     Class(u32),
     Optional(u32),
+    List(u32),
 }
 
 impl Type {
@@ -47,6 +48,9 @@ impl Type {
         })
     }
     pub fn from_id(id: u32) -> Option<Self> {
+        if id & 0x1000_0000 != 0 {
+            return Some(Self::List(id & !0x1000_0000));
+        }
         if id & 0x2000_0000 != 0 {
             return Some(Self::Optional(id & !0x2000_0000));
         }
@@ -96,6 +100,7 @@ impl Type {
             Self::Enum(id) => 0x8000_0000 | id,
             Self::Class(id) => 0x4000_0000 | id,
             Self::Optional(id) => 0x2000_0000 | id,
+            Self::List(id) => 0x1000_0000 | id,
         }
     }
     pub fn integer(self) -> bool {
@@ -160,6 +165,7 @@ impl std::fmt::Display for Type {
             Self::Enum(_) => "enum",
             Self::Class(_) => "class",
             Self::Optional(_) => "optional",
+            Self::List(_) => "List",
         })
     }
 }
@@ -390,7 +396,9 @@ pub fn display(value: Value, ty: Type) -> Result<String, String> {
         Type::Bool => if value.lo == 0 { "false" } else { "true" }.into(),
         Type::None => "None".into(),
         Type::Enum(_) => value.lo.to_string(),
-        Type::Class(_) => return Err("class objects cannot be printed directly".into()),
+        Type::Class(_) | Type::List(_) => {
+            return Err(format!("{ty} values cannot be printed directly"));
+        }
         Type::Optional(inner) => {
             if value.hi == 0 {
                 "None".into()
