@@ -102,6 +102,7 @@ pub enum Statement {
     Noop(Option<String>),
     Assign(usize, Expr),
     Disconnect(usize, usize),
+    Remove(usize),
     Clamp(usize, Expr, Expr),
     Print(Expr, bool),
     Call(Call),
@@ -184,6 +185,7 @@ struct Parser {
     classes: HashMap<String, ClassDefinition>,
     type_aliases: HashMap<String, Type>,
     loop_depth: usize,
+    lifecycle_hook: Option<String>,
     symbol_aliases: HashMap<String, SymbolAlias>,
 }
 
@@ -1279,9 +1281,16 @@ impl Parser {
                     let member_position = self.position();
                     let member = self.name()?;
                     if member == "remove" {
+                        if self.lifecycle_hook.as_deref() == Some("__remove__")
+                            && matches!(self.types[slot], Some(Type::Class(_)))
+                        {
+                            return Err(
+                                position.error("__remove__ cannot remove an object recursively")
+                            );
+                        }
                         self.bindings.remove(&name);
                         self.removed_variables.insert(name);
-                        Statement::Noop(None)
+                        Statement::Remove(slot)
                     } else if member == "disconect" || member == "disconnect" {
                         let binding = self.bindings.get(&name).unwrap();
                         if !binding.alias {
@@ -1330,6 +1339,9 @@ impl Parser {
                             member_position,
                         ))
                     } else {
+                        if name == "self" && self.lifecycle_hook.as_deref() == Some("__change__") {
+                            return Err(position.error("__change__ cannot modify self recursively"));
+                        }
                         self.writable_variable(&name, position)?;
                         self.symbol('=')?;
                         Statement::SetField(Expr::Variable(slot), member, self.expression(0)?)
@@ -1460,6 +1472,7 @@ impl Parser {
         self.declarations.clear();
         self.result_name = None;
         self.loop_depth = 0;
+        self.lifecycle_hook = None;
         self.symbol_aliases.clear();
         let mut optional_parameters = Vec::new();
         let function_position = self.position();
@@ -1475,6 +1488,14 @@ impl Parser {
         }
         self.word("fun")?;
         let source_name = self.name()?;
+        if owner.is_some()
+            && matches!(
+                source_name.as_str(),
+                "__new__" | "__change__" | "__remove__"
+            )
+        {
+            self.lifecycle_hook = Some(source_name.clone());
+        }
         self.symbol('(')?;
         if !self.take(Token::Symbol(')')) {
             let mut found_optional = false;
@@ -1525,9 +1546,16 @@ impl Parser {
                 }
             }
             None
-        } else if source_name == "__new__" && owner.is_some() {
+        } else if owner.is_some()
+            && matches!(
+                source_name.as_str(),
+                "__new__" | "__change__" | "__remove__"
+            )
+        {
             if parameters != 1 {
-                return Err(self.position().error("__new__ must have no parameters"));
+                return Err(self
+                    .position()
+                    .error(format!("{source_name} must have no parameters")));
             }
             None
         } else {
@@ -1713,10 +1741,16 @@ impl Parser {
                     .position()
                     .error(format!("method '{method_name}' is already declared")));
             }
+            if matches!(
+                method_name.as_str(),
+                "__new__" | "__change__" | "__remove__"
+            ) && public
+            {
+                return Err(self
+                    .position()
+                    .error(format!("{method_name} cannot be public")));
+            }
             if method_name == "__new__" {
-                if public {
-                    return Err(self.position().error("__new__ cannot be public"));
-                }
                 has_constructor = true;
             }
             let function = self.function_owned(Some((name.clone(), id)))?;
@@ -2018,6 +2052,7 @@ fn parse_tokens(tokens: Vec<(Token, Position)>) -> Result<Program, String> {
         classes: HashMap::new(),
         type_aliases: HashMap::new(),
         loop_depth: 0,
+        lifecycle_hook: None,
         symbol_aliases: HashMap::new(),
     };
     let mut functions = Vec::new();

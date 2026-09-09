@@ -301,6 +301,13 @@ impl Generator {
                     self.load(*source);
                     self.store(*destination);
                 }
+                Instruction::Remove(object, hook) => {
+                    if let Some(hook) = hook {
+                        self.expression(object);
+                        let receiver = self.save();
+                        self.call_saved(hook, &[receiver]);
+                    }
+                }
                 Instruction::Clamp(slot, low, high) => {
                     self.expression(low);
                     let low = self.save();
@@ -333,7 +340,7 @@ impl Generator {
                     }
                 }
                 Instruction::Call(expr) => self.expression(expr),
-                Instruction::SetField(object, index, value) => {
+                Instruction::SetField(object, index, value, hook) => {
                     self.expression(object);
                     let receiver = self.save();
                     self.expression(value);
@@ -347,6 +354,9 @@ impl Generator {
                         index * 16,
                         index * 16 + 8
                     ));
+                    if let Some(hook) = hook {
+                        self.call_saved(hook, &[receiver]);
+                    }
                 }
                 Instruction::SetIndex(list, index, value) => {
                     self.expression(list);

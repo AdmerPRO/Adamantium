@@ -471,12 +471,12 @@ __remove__
 
 * [x] Implement `__new__`
 * [x] Automatically call `__new__` on object creation
-* [ ] Implement `__change__`
-* [ ] Call `__change__` on class/object changes
-* [ ] Implement `__remove__`
-* [ ] Call `__remove__` when an object is removed
-* [ ] Define lifecycle ordering
-* [ ] Prevent unsafe recursive lifecycle behavior
+* [x] Implement `__change__`
+* [x] Call `__change__` on class/object changes
+* [x] Implement `__remove__`
+* [x] Call `__remove__` when an object is removed
+* [x] Define lifecycle ordering
+* [x] Prevent unsafe recursive lifecycle behavior
 
 ---
 

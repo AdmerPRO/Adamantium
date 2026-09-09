@@ -33,10 +33,11 @@ pub enum Instruction {
     Noop,
     Assign(usize, Expression),
     Disconnect(usize, usize),
+    Remove(Expression, Option<String>),
     Clamp(usize, Expression, Expression),
     Print(Expression, bool),
     Call(Expression),
-    SetField(Expression, usize, Expression),
+    SetField(Expression, usize, Expression, Option<String>),
     SetIndex(Expression, Expression, Expression),
     Message(Expression, bool, usize),
     If(Expression, Vec<Instruction>, Vec<Instruction>),
@@ -711,6 +712,25 @@ impl Checker<'_> {
                 self.types[*destination] = Some(ty);
                 Instruction::Disconnect(*destination, *source)
             }
+            Statement::Remove(slot) => {
+                let ty = self.types[*slot].ok_or("unknown removed variable type")?;
+                let hook = if let Type::Class(id) = ty {
+                    self.classes[id as usize]
+                        .methods
+                        .iter()
+                        .find(|method| method.name == "__remove__")
+                        .map(|method| method.function.clone())
+                } else {
+                    None
+                };
+                Instruction::Remove(
+                    Expression {
+                        ty,
+                        kind: Kind::Variable(*slot),
+                    },
+                    hook,
+                )
+            }
             Statement::Clamp(slot, low, high) => {
                 let ty = self.types[*slot].ok_or("unknown variable type")?;
                 if !ty.numeric() {
@@ -759,7 +779,12 @@ impl Checker<'_> {
                 if !field.public && self.owner != Some(id) {
                     return Err(format!("invalid access: field '{field_name}' is private"));
                 }
-                Instruction::SetField(object, index, self.expression(value, Some(field.ty))?)
+                let hook = class
+                    .methods
+                    .iter()
+                    .find(|method| method.name == "__change__")
+                    .map(|method| method.function.clone());
+                Instruction::SetField(object, index, self.expression(value, Some(field.ty))?, hook)
             }
             Statement::SetIndex(list, index, value) => {
                 let list = self.expression(list, None)?;

@@ -279,6 +279,32 @@ fn removes_variable_names_and_allows_fresh_redeclarations() {
 }
 
 #[test]
+fn validates_class_lifecycle_hooks() {
+    assert!(parse("class C(pub value:int) { fun __new__() {} fun __change__() { print.newline(\"changed\"); } fun __remove__() { print.newline(\"removed\"); } } fun main() { var object=C(value=1); object.value=2; object.remove; }").is_ok());
+    for (source, expected) in [
+        (
+            "class C(pub value:int) { fun __new__() {} pub fun __change__() {} } fun main() {}",
+            "cannot be public",
+        ),
+        (
+            "class C(pub value:int) { fun __new__() {} fun __remove__(value:int) {} } fun main() {}",
+            "must have no parameters",
+        ),
+        (
+            "class C(pub value:int) { fun __new__() {} fun __change__() { self.value=2; } } fun main() {}",
+            "cannot modify self recursively",
+        ),
+        (
+            "class C(pub value:int) { fun __new__() {} fun __remove__() { self.remove; } } fun main() {}",
+            "cannot remove an object recursively",
+        ),
+    ] {
+        let error = parse(source).unwrap_err();
+        assert!(error.contains(expected), "{error}");
+    }
+}
+
+#[test]
 fn changeable_variables_keep_existing_behavior() {
     for modifier in ["", "ch"] {
         let source = format!(

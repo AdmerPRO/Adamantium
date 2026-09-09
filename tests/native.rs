@@ -11,6 +11,20 @@ static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_class_lifecycle_hooks_run_in_order() {
+    let source = "class Counter(pub value:int) { fun __new__() { print.newline(\"new\"); } fun __change__() { print.newline(\"change\"); } fun __remove__() { print.newline(\"remove\"); } } fun main() { var counter=Counter(value=1); counter.value=2; counter.remove; }";
+    let output = Project::new(source).run();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"new\r\nchange\r\nremove\r\n");
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_removed_names_can_be_redeclared() {
     let source = "fun main() { var a=10; var alias=a.as_variable; a.remove; alias=15; var a=20; print.newline(alias); print.newline(a); }";
     let output = Project::new(source).run();

@@ -308,7 +308,10 @@ through `self` inside the same class. Class values use copy semantics, including
 assignments and ordinary function arguments. Methods modify their receiver.
 All fields are currently required, direct printing of an object is unsupported,
 and class-typed fields are reserved until independent deep copies are implemented.
-Lifecycle hooks other than `__new__` are not supported.
+Lifecycle hooks are private and take no parameters. Construction initializes fields and then calls
+`__new__`. A successful field assignment calls `__change__` after storing the new value. Removing
+an object with `object.remove;` calls `__remove__` before the name disappears. The compiler rejects
+direct field mutation from `__change__` and recursive object removal from `__remove__`.
 
 ### Comments
 

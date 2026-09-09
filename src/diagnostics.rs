@@ -28,6 +28,9 @@ pub fn warnings(program: &Program) -> Vec<String> {
                     declared.insert(*destination);
                     reads.insert(*source);
                 }
+                Statement::Remove(slot) => {
+                    reads.insert(*slot);
+                }
                 Statement::Clamp(slot, low, high) => {
                     reads.insert(*slot);
                     visit(low, &mut reads, &mut calls);
@@ -197,6 +200,9 @@ fn visit_statement(
         Statement::Disconnect(destination, source) => {
             declared.insert(*destination);
             reads.insert(*source);
+        }
+        Statement::Remove(slot) => {
+            reads.insert(*slot);
         }
         Statement::Clamp(slot, low, high) => {
             reads.insert(*slot);
