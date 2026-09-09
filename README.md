@@ -345,6 +345,18 @@ one of these modifiers.
 `variable` is an exact alias of `var`, and `changeable` is an exact alias of `ch`.
 Both forms work with type suffixes, `static`, and `stc`.
 
+An active variable name cannot be declared again in the same function. `remove` deletes the
+name, after which it cannot be read or assigned until it is declared again. The new declaration
+creates an independent variable:
+
+```text
+var value = 10;
+value.remove;
+var value = 20;
+```
+
+Removing one name does not remove aliases that still refer to the same storage.
+
 ### Variable and symbol aliases
 
 `as_variable` creates an alias. For ordinary values, both names share the same

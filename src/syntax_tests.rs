@@ -258,6 +258,27 @@ fn static_aliases_reject_every_mutation() {
 }
 
 #[test]
+fn removes_variable_names_and_allows_fresh_redeclarations() {
+    assert!(parse("fun main() { var a=10; a.remove; var a=20; print.newline(a); }").is_ok());
+    assert!(
+        parse("fun main() { var a=10; var b=a.as_variable; a.remove; b=20; print.newline(b); }")
+            .is_ok()
+    );
+
+    for source in [
+        "fun main() { var a=10; var a=20; }",
+        "fun main() { var a=10; a.remove; print.newline(a); }",
+        "fun main() { var a=10; a.remove; a=20; }",
+        "fun main() { var a=10; a.remove; a.remove; }",
+        "fun main() { var a=10; a.missing; }",
+    ] {
+        assert!(parse(source).is_err(), "{source}");
+    }
+    let error = parse("fun main() { var a=10; a.remove; print.newline(a); }").unwrap_err();
+    assert!(error.contains("variable 'a' was removed"), "{error}");
+}
+
+#[test]
 fn changeable_variables_keep_existing_behavior() {
     for modifier in ["", "ch"] {
         let source = format!(

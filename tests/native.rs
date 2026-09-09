@@ -11,6 +11,20 @@ static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_removed_names_can_be_redeclared() {
+    let source = "fun main() { var a=10; var alias=a.as_variable; a.remove; alias=15; var a=20; print.newline(alias); print.newline(a); }";
+    let output = Project::new(source).run();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"15\r\n20\r\n");
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_type_aliases_use_the_original_runtime_types() {
     let source = "define Number=int; define Numbers=List[Number]; fun echo(value:Number) result:Number { result=value; } fun main() { var value=echo(7:Number); var values=List[1,2]:Numbers; print.newline(value); print.newline(values[1]); }";
     let output = Project::new(source).run();

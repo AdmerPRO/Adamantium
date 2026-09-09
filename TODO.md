@@ -145,8 +145,8 @@ var a = 10;
 * [x] Implement `=+`, `=-`, `=*`, and `=/` compound assignments
 * [x] Implement one-time `clamp(min,max)` on changeable numeric variables
 * [x] Implement variable scope — one local scope per function call
-* [ ] Implement variable shadowing rules
-* [ ] Prevent use of removed variables
+* [x] Implement variable shadowing rules
+* [x] Prevent use of removed variables
 * [x] Prevent invalid reassignment
 * [x] Implement fixed variable types
 

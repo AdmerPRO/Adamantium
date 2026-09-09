@@ -176,6 +176,7 @@ struct Parser {
     tokens: Vec<(Token, Position)>,
     cursor: usize,
     bindings: HashMap<String, Binding>,
+    removed_variables: HashSet<String>,
     result_name: Option<String>,
     types: Vec<Option<Type>>,
     declarations: Vec<(String, Position)>,
@@ -678,6 +679,7 @@ impl Parser {
         if self.bindings.contains_key(&name) || self.symbol_aliases.contains_key(&name) {
             return Err(position.error(format!("variable '{name}' is already declared")));
         }
+        self.removed_variables.remove(&name);
         let slot = self.types.len();
         self.declarations.push((name.clone(), position));
         self.types.push(ty);
@@ -764,10 +766,13 @@ impl Parser {
         (empty_call && called_later).then(|| name.clone())
     }
     fn variable(&self, name: &str, read: bool, position: Position) -> Result<usize, String> {
-        let binding = self
-            .bindings
-            .get(name)
-            .ok_or_else(|| position.error(format!("variable '{name}' is not declared")))?;
+        let binding = self.bindings.get(name).ok_or_else(|| {
+            if self.removed_variables.contains(name) {
+                position.error(format!("variable '{name}' was removed"))
+            } else {
+                position.error(format!("variable '{name}' is not declared"))
+            }
+        })?;
         if read && !binding.initialized {
             return Err(position.error(format!("variable '{name}' is not initialized")));
         }
@@ -1126,6 +1131,7 @@ impl Parser {
                             position.error(format!("variable '{name}' is already declared"))
                         );
                     }
+                    self.removed_variables.remove(&name);
                     self.symbol_aliases
                         .insert(name, SymbolAlias::Function(target.clone()));
                     self.symbol(';')?;
@@ -1147,6 +1153,7 @@ impl Parser {
                     } else {
                         None
                     };
+                    self.removed_variables.remove(&name);
                     self.symbol_aliases.insert(name, target);
                     self.symbol(';')?;
                     return Ok(Statement::Noop(function));
@@ -1173,6 +1180,7 @@ impl Parser {
                         );
                     }
                     let source_changeable = self.bindings[&source].changeable;
+                    self.removed_variables.remove(&name);
                     self.bindings.insert(
                         name,
                         Binding {
@@ -1216,8 +1224,22 @@ impl Parser {
                 Statement::Return
             }
             Token::Word(name) => {
+                if self.removed_variables.contains(&name) {
+                    return Err(position.error(format!("variable '{name}' was removed")));
+                }
                 if self.symbol_aliases.contains_key(&name) {
-                    if self.peek() == &Token::Symbol('(') {
+                    if self.peek() == &Token::Symbol('.')
+                        && self
+                            .tokens
+                            .get(self.cursor + 1)
+                            .is_some_and(|(token, _)| token == &Token::Word("remove".into()))
+                    {
+                        self.next();
+                        self.next();
+                        self.symbol_aliases.remove(&name);
+                        self.removed_variables.insert(name);
+                        Statement::Noop(None)
+                    } else if self.peek() == &Token::Symbol('(') {
                         let SymbolAlias::Function(target) = self.symbol_aliases[&name].clone()
                         else {
                             return Err(
@@ -1256,7 +1278,11 @@ impl Parser {
                     let slot = self.variable(&name, true, position)?;
                     let member_position = self.position();
                     let member = self.name()?;
-                    if member == "disconect" || member == "disconnect" {
+                    if member == "remove" {
+                        self.bindings.remove(&name);
+                        self.removed_variables.insert(name);
+                        Statement::Noop(None)
+                    } else if member == "disconect" || member == "disconnect" {
                         let binding = self.bindings.get(&name).unwrap();
                         if !binding.alias {
                             return Err(
@@ -1429,6 +1455,7 @@ impl Parser {
     }
     fn function_owned(&mut self, owner: Option<(String, u32)>) -> Result<Function, String> {
         self.bindings.clear();
+        self.removed_variables.clear();
         self.types.clear();
         self.declarations.clear();
         self.result_name = None;
@@ -1983,6 +2010,7 @@ fn parse_tokens(tokens: Vec<(Token, Position)>) -> Result<Program, String> {
         tokens,
         cursor: 0,
         bindings: HashMap::new(),
+        removed_variables: HashSet::new(),
         result_name: None,
         types: Vec::new(),
         declarations: Vec::new(),
