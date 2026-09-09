@@ -223,12 +223,12 @@ Implement:
 ### Type aliases
 
 ```adamantium
-define dooblelista = List[List[]];
+define Numbers = List[int];
 ```
 
-* [ ] Implement `define`
-* [ ] Make aliases refer to the original type
-* [ ] Prevent aliases from creating distinct runtime types
+* [x] Implement `define`
+* [x] Make aliases refer to the original type
+* [x] Prevent aliases from creating distinct runtime types
 
 ---
 
@@ -795,14 +795,14 @@ var stc a = 10:i32;
 
 # 30. Generics
 
-* [ ] Design generic syntax
-* [ ] Implement generic functions
-* [ ] Implement generic classes
-* [ ] Implement generic lists
-* [ ] Implement generic constraints
-* [ ] Implement generic type checking
-* [ ] Implement generic code generation
-* [ ] Produce useful generic compiler errors
+* [x] Design generic syntax
+* [x] Implement generic functions
+* [x] Implement generic classes
+* [x] Implement generic lists
+* [x] Implement generic constraints
+* [x] Implement generic type checking
+* [x] Implement generic code generation
+* [x] Produce useful generic compiler errors
 
 ---
 

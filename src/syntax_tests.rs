@@ -62,6 +62,104 @@ fn parses_enum_declarations_and_values() {
 }
 
 #[test]
+fn type_aliases_resolve_to_the_original_type() {
+    let program = parse(
+        "define Number = int; define Numbers = List[Number]; fun identity(value:Number) result:Number { result=value; } fun main() { var number=identity(7:Number); var numbers=List[1,2]:Numbers; print.newline(number); print.newline(numbers[0]); }",
+    )
+    .unwrap();
+    assert_eq!(program.functions[0].types[0], Some(Type::I32));
+    assert_eq!(program.functions[0].types[1], Some(Type::I32));
+    assert_eq!(program.functions[1].types[0], None);
+
+    for source in [
+        "define Value=int; define Value=i64; fun main() {}",
+        "define Value=Missing; fun main() {}",
+        "define Value=int; enum Value { item } fun main() {}",
+        "define Value=int; class Value() { fun __new__() {} } fun main() {}",
+        "define Value=int; fun Value() result:None {} fun main() {}",
+        "define Value=int; fun main() { var Value=1; }",
+    ] {
+        assert!(parse(source).is_err(), "{source}");
+    }
+}
+
+#[test]
+fn imports_type_aliases_between_modules() {
+    let files = vec![
+        ("utils".into(), "define Number=int;".into()),
+        (
+            "".into(),
+            "pack utils; use utils:[Number]; fun main() { var value=7:Number; print.newline(value); }".into(),
+        ),
+    ];
+    parse_modules(&files).unwrap();
+}
+
+#[test]
+fn expands_generic_functions_and_classes() {
+    let program = parse(
+        "fun identity<T>(value:T) result:T { result=value; } fun first<A,B>(value:A,other:B) result:A { result=value; } fun list<T>(value:T) result:List[T] { result=List[value]; } class Box<T>(pub value:T) { fun __new__() {} } fun main() { var number=identity<int>(7); var text=identity<string>(\"hello\"); var chosen=first<i64,string>(9:i64,\"x\"); var numbers=list<int>(4); var boxed=Box<i64>(value=chosen); print.newline(number); print.newline(text); print.newline(numbers[0]); print.newline(boxed.value); }",
+    )
+    .unwrap();
+    assert!(
+        program
+            .functions
+            .iter()
+            .any(|function| function.name == "identity__generic__int")
+    );
+    assert!(
+        program
+            .functions
+            .iter()
+            .any(|function| function.name == "identity__generic__string")
+    );
+    assert!(
+        program
+            .classes
+            .iter()
+            .any(|class| class.name == "Box__generic__i64")
+    );
+}
+
+#[test]
+fn imports_generic_declarations_between_modules() {
+    let files = vec![
+        ("utils".into(), "fun identity<T>(value:T) result:T { result=value; }".into()),
+        ("".into(), "pack utils; use utils:[identity]; fun main() { print.newline(identity<int>(7)); print.newline(utils:identity<string>(\"ok\")); }".into()),
+    ];
+    parse_modules(&files).unwrap();
+}
+
+#[test]
+fn validates_generic_arguments_and_constraints() {
+    for (source, expected) in [
+        (
+            "fun id<T>(value:T) result:T { result=value; } fun main() { print.newline(id(1)); }",
+            "requires explicit type arguments",
+        ),
+        (
+            "fun id<T>(value:T) result:T { result=value; } fun main() { print.newline(id<int,string>(1)); }",
+            "expects 1 type arguments",
+        ),
+        (
+            "fun add<T:numeric>(value:T) result:T { result=value+value; } fun main() { print.newline(add<string>(\"x\")); }",
+            "does not satisfy generic constraint",
+        ),
+        (
+            "fun id<T:mystery>(value:T) result:T { result=value; } fun main() { print.newline(id<int>(1)); }",
+            "unknown generic constraint",
+        ),
+        (
+            "fun id<T,T>(value:T) result:T { result=value; } fun main() {}",
+            "declared twice",
+        ),
+    ] {
+        let error = parse(source).unwrap_err();
+        assert!(error.contains(expected), "{error}");
+    }
+}
+
+#[test]
 fn reports_imports_without_interpreting_comments_or_strings() {
     for directive in [
         "use utils::add;",

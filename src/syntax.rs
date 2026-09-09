@@ -14,6 +14,10 @@ enum Token {
     End,
 }
 
+type PositionedToken = (Token, Position);
+type GenericArguments = Vec<Vec<PositionedToken>>;
+type GenericInstances = HashMap<String, Vec<(String, GenericArguments)>>;
+
 #[derive(Clone, Copy, Debug)]
 pub struct Position {
     line: usize,
@@ -177,6 +181,7 @@ struct Parser {
     declarations: Vec<(String, Position)>,
     enums: HashMap<String, EnumDefinition>,
     classes: HashMap<String, ClassDefinition>,
+    type_aliases: HashMap<String, Type>,
     loop_depth: usize,
     symbol_aliases: HashMap<String, SymbolAlias>,
 }
@@ -306,6 +311,265 @@ fn lex(source: &str) -> Result<Vec<(Token, Position)>, String> {
     Ok(tokens)
 }
 
+#[derive(Clone)]
+struct GenericTemplate {
+    name: String,
+    parameters: Vec<(String, Option<String>)>,
+    tokens: Vec<PositionedToken>,
+    start: usize,
+    end: usize,
+}
+
+fn generic_arguments(
+    tokens: &[PositionedToken],
+    start: usize,
+) -> Result<(GenericArguments, usize), String> {
+    let position = tokens[start].1;
+    let mut arguments = vec![Vec::new()];
+    let (mut angles, mut brackets) = (0usize, 0usize);
+    let mut index = start + 1;
+    while index < tokens.len() {
+        match tokens[index].0 {
+            Token::Symbol('<') => {
+                angles += 1;
+                arguments.last_mut().unwrap().push(tokens[index].clone());
+            }
+            Token::Symbol('>') if angles == 0 && brackets == 0 => {
+                if arguments.last().is_some_and(Vec::is_empty) {
+                    return Err(position.error("generic argument list cannot be empty"));
+                }
+                return Ok((arguments, index + 1));
+            }
+            Token::Symbol('>') => {
+                angles = angles.saturating_sub(1);
+                arguments.last_mut().unwrap().push(tokens[index].clone());
+            }
+            Token::Symbol('[') => {
+                brackets += 1;
+                arguments.last_mut().unwrap().push(tokens[index].clone());
+            }
+            Token::Symbol(']') => {
+                brackets = brackets.saturating_sub(1);
+                arguments.last_mut().unwrap().push(tokens[index].clone());
+            }
+            Token::Symbol(',') if angles == 0 && brackets == 0 => arguments.push(Vec::new()),
+            _ => arguments.last_mut().unwrap().push(tokens[index].clone()),
+        }
+        index += 1;
+    }
+    Err(position.error("unterminated generic argument list; expected '>'"))
+}
+
+fn generic_type_name(tokens: &[(Token, Position)]) -> String {
+    tokens
+        .iter()
+        .map(|(token, _)| match token {
+            Token::Word(value) | Token::Number(value) => value.clone(),
+            Token::Symbol(value) => value.to_string(),
+            _ => "type".into(),
+        })
+        .collect::<String>()
+}
+
+fn validate_generic_constraint(
+    argument: &[(Token, Position)],
+    constraint: Option<&str>,
+    position: Position,
+) -> Result<(), String> {
+    let name = generic_type_name(argument);
+    let accepted = match constraint {
+        None | Some("any") => true,
+        Some("numeric") => matches!(
+            name.as_str(),
+            "i8" | "i16"
+                | "i32"
+                | "i64"
+                | "int"
+                | "u4"
+                | "u8"
+                | "u16"
+                | "u32"
+                | "u64"
+                | "u"
+                | "f32"
+                | "f64"
+                | "f128"
+                | "float"
+        ),
+        Some("integer") => matches!(
+            name.as_str(),
+            "i8" | "i16" | "i32" | "i64" | "int" | "u4" | "u8" | "u16" | "u32" | "u64" | "u"
+        ),
+        Some("float") => matches!(name.as_str(), "f32" | "f64" | "f128" | "float"),
+        Some("comparable") => !matches!(name.as_str(), "None") && !name.starts_with("List["),
+        Some(other) => return Err(position.error(format!("unknown generic constraint '{other}'"))),
+    };
+    if accepted {
+        Ok(())
+    } else {
+        Err(position.error(format!(
+            "type '{name}' does not satisfy generic constraint '{}'",
+            constraint.unwrap()
+        )))
+    }
+}
+
+fn expand_generics(tokens: Vec<(Token, Position)>) -> Result<Vec<(Token, Position)>, String> {
+    let mut templates = Vec::new();
+    let mut depth = 0usize;
+    let mut index = 0usize;
+    while index + 3 < tokens.len() {
+        match tokens[index].0 {
+            Token::Symbol('{') => depth += 1,
+            Token::Symbol('}') => depth = depth.saturating_sub(1),
+            _ => (),
+        }
+        if depth == 0
+            && matches!(&tokens[index].0, Token::Word(word) if word == "fun" || word == "class")
+            && matches!(tokens[index + 1].0, Token::Word(_))
+            && tokens[index + 2].0 == Token::Symbol('<')
+        {
+            let Token::Word(name) = &tokens[index + 1].0 else {
+                unreachable!()
+            };
+            let (parameter_tokens, header_end) = generic_arguments(&tokens, index + 2)?;
+            let mut parameters = Vec::new();
+            for parameter in parameter_tokens {
+                let Some((Token::Word(parameter_name), _)) = parameter.first() else {
+                    return Err(tokens[index + 2]
+                        .1
+                        .error("expected a generic parameter name"));
+                };
+                let constraint = match parameter.as_slice() {
+                    [_] => None,
+                    [_, (Token::Symbol(':'), _), (Token::Word(value), _)] => Some(value.clone()),
+                    _ => return Err(parameter[0].1.error("expected 'T' or 'T:constraint'")),
+                };
+                if parameters
+                    .iter()
+                    .any(|(existing, _)| existing == parameter_name)
+                {
+                    return Err(parameter[0].1.error(format!(
+                        "generic parameter '{parameter_name}' is declared twice"
+                    )));
+                }
+                parameters.push((parameter_name.clone(), constraint));
+            }
+            let body = (header_end..tokens.len())
+                .find(|cursor| tokens[*cursor].0 == Token::Symbol('{'))
+                .ok_or_else(|| tokens[index].1.error("generic declaration requires a body"))?;
+            let mut body_depth = 1usize;
+            let mut end = body + 1;
+            while end < tokens.len() && body_depth != 0 {
+                match tokens[end].0 {
+                    Token::Symbol('{') => body_depth += 1,
+                    Token::Symbol('}') => body_depth -= 1,
+                    _ => (),
+                }
+                end += 1;
+            }
+            if body_depth != 0 {
+                return Err(tokens[body].1.error("unterminated generic declaration"));
+            }
+            let mut template_tokens = tokens[index..end].to_vec();
+            template_tokens.drain(2..header_end - index);
+            templates.push(GenericTemplate {
+                name: name.clone(),
+                parameters,
+                tokens: template_tokens,
+                start: index,
+                end,
+            });
+            index = end;
+            continue;
+        }
+        index += 1;
+    }
+    if templates.is_empty() {
+        return Ok(tokens);
+    }
+
+    let mut instances = GenericInstances::new();
+    let mut rewritten = Vec::new();
+    index = 0;
+    while index < tokens.len() {
+        if let Some(template) = templates.iter().find(|template| template.start == index) {
+            index = template.end;
+            continue;
+        }
+        if let Token::Word(name) = &tokens[index].0
+            && let Some(template) = templates.iter().find(|template| &template.name == name)
+        {
+            if tokens
+                .get(index + 1)
+                .is_some_and(|token| token.0 == Token::Symbol('<'))
+            {
+                let (arguments, end) = generic_arguments(&tokens, index + 1)?;
+                if arguments.len() != template.parameters.len() {
+                    return Err(tokens[index].1.error(format!(
+                        "generic '{}' expects {} type arguments, found {}",
+                        name,
+                        template.parameters.len(),
+                        arguments.len()
+                    )));
+                }
+                for (argument, (_, constraint)) in arguments.iter().zip(&template.parameters) {
+                    validate_generic_constraint(argument, constraint.as_deref(), tokens[index].1)?;
+                }
+                let suffix = arguments
+                    .iter()
+                    .map(|argument| {
+                        generic_type_name(argument)
+                            .replace(|c: char| !c.is_ascii_alphanumeric(), "_")
+                    })
+                    .collect::<Vec<_>>()
+                    .join("__");
+                let specialized = format!("{name}__generic__{suffix}");
+                let values = instances.entry(name.clone()).or_default();
+                if !values.iter().any(|(existing, _)| existing == &specialized) {
+                    values.push((specialized.clone(), arguments));
+                }
+                rewritten.push((Token::Word(specialized), tokens[index].1));
+                index = end;
+                continue;
+            }
+            return Err(tokens[index].1.error(format!(
+                "generic '{name}' requires explicit type arguments, for example {name}<int>"
+            )));
+        }
+        rewritten.push(tokens[index].clone());
+        index += 1;
+    }
+
+    let end_token = rewritten.pop().filter(|token| token.0 == Token::End);
+    let mut generated = Vec::new();
+    for template in &templates {
+        for (specialized, arguments) in instances.remove(&template.name).unwrap_or_default() {
+            let substitutions = template
+                .parameters
+                .iter()
+                .map(|(name, _)| name)
+                .zip(arguments.iter())
+                .collect::<HashMap<_, _>>();
+            for (token_index, token) in template.tokens.iter().enumerate() {
+                if token_index == 1 {
+                    generated.push((Token::Word(specialized.clone()), token.1));
+                } else if let Token::Word(word) = &token.0
+                    && let Some(replacement) = substitutions.get(word)
+                {
+                    generated.extend((*replacement).clone());
+                } else {
+                    generated.push(token.clone());
+                }
+            }
+        }
+    }
+    generated.extend(rewritten);
+    let mut rewritten = generated;
+    rewritten.push(end_token.unwrap_or((Token::End, Position { line: 1, column: 1 })));
+    Ok(rewritten)
+}
+
 impl Parser {
     fn peek(&self) -> &Token {
         &self.tokens[self.cursor].0
@@ -383,6 +647,7 @@ impl Parser {
                     "and",
                     "panic",
                     "warn",
+                    "define",
                 ]
                 .contains(&name.as_str())
                     && Type::parse(&name).is_none() =>
@@ -403,6 +668,11 @@ impl Parser {
         if self.enums.contains_key(&name) {
             return Err(position.error(format!(
                 "variable '{name}' conflicts with an enum of the same name"
+            )));
+        }
+        if self.type_aliases.contains_key(&name) {
+            return Err(position.error(format!(
+                "variable '{name}' conflicts with a type alias of the same name"
             )));
         }
         if self.bindings.contains_key(&name) || self.symbol_aliases.contains_key(&name) {
@@ -520,6 +790,7 @@ impl Parser {
             return Ok(Type::List(element.id()));
         }
         Type::parse(&name)
+            .or_else(|| self.type_aliases.get(&name).copied())
             .or_else(|| self.enums.get(&name).map(|definition| definition.ty))
             .or_else(|| {
                 self.classes
@@ -527,6 +798,22 @@ impl Parser {
                     .map(|definition| Type::Class(definition.id))
             })
             .ok_or_else(|| position.error(format!("unsupported type '{name}'")))
+    }
+    fn type_alias_declaration(&mut self) -> Result<String, String> {
+        self.word("define")?;
+        let position = self.position();
+        let name = self.name()?;
+        if self.type_aliases.contains_key(&name)
+            || self.enums.contains_key(&name)
+            || self.classes.contains_key(&name)
+        {
+            return Err(position.error(format!("type name '{name}' is already declared")));
+        }
+        self.symbol('=')?;
+        let ty = self.type_name()?;
+        self.symbol(';')?;
+        self.type_aliases.insert(name.clone(), ty);
+        Ok(name)
     }
     fn writable_variable(&self, name: &str, position: Position) -> Result<usize, String> {
         let slot = self.variable(name, false, position)?;
@@ -1275,6 +1562,9 @@ impl Parser {
         if self.enums.contains_key(&name) {
             return Err(position.error(format!("enum '{name}' is already declared")));
         }
+        if self.type_aliases.contains_key(&name) {
+            return Err(position.error(format!("'{name}' is already declared as a type alias")));
+        }
         self.symbol('{')?;
         let mut variants = HashMap::new();
         if self.peek() == &Token::Symbol('}') {
@@ -1318,6 +1608,9 @@ impl Parser {
         }
         if self.enums.contains_key(&name) {
             return Err(position.error(format!("'{name}' is already declared as an enum")));
+        }
+        if self.type_aliases.contains_key(&name) {
+            return Err(position.error(format!("'{name}' is already declared as a type alias")));
         }
         let id = self.classes.len() as u32;
         self.classes.insert(
@@ -1465,6 +1758,7 @@ enum ExportKind {
     Function,
     Enum,
     Class,
+    TypeAlias,
 }
 
 fn module_prefix(module: &str) -> String {
@@ -1482,13 +1776,15 @@ pub fn parse_modules(files: &[(String, String)]) -> Result<Program, String> {
                 Token::Symbol('{') => depth += 1,
                 Token::Symbol('}') => depth -= 1,
                 Token::Word(keyword)
-                    if depth == 0 && matches!(keyword.as_str(), "fun" | "enum" | "class") =>
+                    if depth == 0
+                        && matches!(keyword.as_str(), "fun" | "enum" | "class" | "define") =>
                 {
                     if let Token::Word(name) = &tokens[index + 1].0 {
                         let kind = match keyword.as_str() {
                             "fun" => ExportKind::Function,
                             "enum" => ExportKind::Enum,
-                            _ => ExportKind::Class,
+                            "class" => ExportKind::Class,
+                            _ => ExportKind::TypeAlias,
                         };
                         let canonical = if module.is_empty() {
                             name.clone()
@@ -1632,21 +1928,31 @@ pub fn parse_modules(files: &[(String, String)]) -> Result<Program, String> {
             {
                 let declaration = depth == 0
                     && index > 0
-                    && matches!(&tokens[index - 1].0, Token::Word(word) if matches!(word.as_str(), "fun" | "enum" | "class"));
+                    && matches!(&tokens[index - 1].0, Token::Word(word) if matches!(word.as_str(), "fun" | "enum" | "class" | "define"));
                 let next = tokens.get(index + 1).map(|value| &value.0);
                 let previous = index
                     .checked_sub(1)
                     .and_then(|i| tokens.get(i))
                     .map(|value| &value.0);
                 let reference = match kind {
-                    ExportKind::Function => matches!(next, Some(Token::Symbol('('))),
+                    ExportKind::Function => {
+                        matches!(next, Some(Token::Symbol('(') | Token::Symbol('<')))
+                    }
                     ExportKind::Enum => {
                         matches!(next, Some(Token::Symbol('.')))
                             || matches!(previous, Some(Token::Symbol(':')))
                     }
                     ExportKind::Class => {
-                        matches!(next, Some(Token::Symbol('(')))
+                        matches!(next, Some(Token::Symbol('(') | Token::Symbol('<')))
                             || matches!(previous, Some(Token::Symbol(':')))
+                    }
+                    ExportKind::TypeAlias => {
+                        matches!(
+                            previous,
+                            Some(Token::Symbol(':') | Token::Symbol('[') | Token::Symbol('='))
+                        ) || (matches!(previous, Some(Token::Symbol('(')))
+                            && index >= 2
+                            && tokens[index - 2].0 == Token::Word("as".into()))
                     }
                 };
                 if declaration || reference {
@@ -1672,6 +1978,7 @@ pub fn parse(source: &str) -> Result<Program, String> {
 }
 
 fn parse_tokens(tokens: Vec<(Token, Position)>) -> Result<Program, String> {
+    let tokens = expand_generics(tokens)?;
     let mut parser = Parser {
         tokens,
         cursor: 0,
@@ -1681,6 +1988,7 @@ fn parse_tokens(tokens: Vec<(Token, Position)>) -> Result<Program, String> {
         declarations: Vec::new(),
         enums: HashMap::new(),
         classes: HashMap::new(),
+        type_aliases: HashMap::new(),
         loop_depth: 0,
         symbol_aliases: HashMap::new(),
     };
@@ -1689,6 +1997,13 @@ fn parse_tokens(tokens: Vec<(Token, Position)>) -> Result<Program, String> {
     while parser.peek() != &Token::End {
         parser.reject_import()?;
         let position = parser.position();
+        if parser.peek() == &Token::Word("define".into()) {
+            let name = parser.type_alias_declaration()?;
+            if signatures.contains_key(&name) {
+                return Err(position.error(format!("'{name}' is already declared as a function")));
+            }
+            continue;
+        }
         if parser.peek() == &Token::Word("enum".into()) {
             let name = parser.enum_declaration()?;
             if signatures.contains_key(&name) {
@@ -1730,6 +2045,12 @@ fn parse_tokens(tokens: Vec<(Token, Position)>) -> Result<Program, String> {
             continue;
         }
         let function = parser.function()?;
+        if parser.type_aliases.contains_key(&function.name) {
+            return Err(position.error(format!(
+                "'{}' is already declared as a type alias",
+                function.name
+            )));
+        }
         if parser.enums.contains_key(&function.name) {
             return Err(position.error(format!(
                 "'{}' is already declared as an enum",

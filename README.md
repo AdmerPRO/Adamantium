@@ -205,10 +205,21 @@ IEEE rounding. Float literals accept decimal fractions and scientific notation.
 Strings contain UTF-8 text and support `\n`, `\r`, `\t`, `\0`, `\"`, and `\\`.
 String variables can be copied, reassigned, passed to functions, and returned.
 Their contents are immutable literals; concatenation and indexing are not yet
-supported. `bool` prints `true` or `false`; `None` prints `None`. Optional types
-are not implemented: a variable of type `None` can only hold `None`.
+supported. `bool` prints `true` or `false`; `None` prints `None`. A variable of
+type `None` can only hold `None`; optional parameters and fields are described below.
 
-`offset`, `List`, and function-value types remain unsupported.
+`offset` remains unsupported.
+
+Type aliases use `define` at file level before their first use:
+
+```text
+define Number = int;
+define Numbers = List[Number];
+```
+
+An alias resolves directly to its original type and does not create a distinct runtime type.
+Aliases can refer to built-in types, enums, classes, lists, or an earlier alias. They can also
+be imported from another module with `use`.
 
 Enums are declared at file level before their first use. Variants are separated
 with commas, and a trailing comma is optional:
@@ -228,6 +239,36 @@ fun main() {
 
 Each enum is a distinct type. Enum values can be assigned, passed to functions,
 returned, and printed. Arithmetic and `clamp` are not supported for enums.
+
+### Generics
+
+Generic functions and classes declare type parameters between `<` and `>`. Calls and object
+construction provide concrete types explicitly:
+
+```text
+fun identity<T>(value:T) result:T {
+    result = value;
+}
+
+class Box<T>(pub value:T) {
+    fun __new__() {}
+}
+
+var number = identity<int>(7);
+var box = Box<string>(value="hello");
+```
+
+Multiple parameters are supported. Generic parameters can appear inside `List`, such as
+`List[T]`. Available constraints are `any`, `numeric`, `integer`, `float`, and `comparable`:
+
+```text
+fun twice<T:numeric>(value:T) result:T {
+    result = value + value;
+}
+```
+
+Each used combination of concrete types creates a specialized function or class during
+compilation. Generic declarations therefore add no dynamic type dispatch to generated code.
 
 ### Classes
 

@@ -11,6 +11,34 @@ static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_type_aliases_use_the_original_runtime_types() {
+    let source = "define Number=int; define Numbers=List[Number]; fun echo(value:Number) result:Number { result=value; } fun main() { var value=echo(7:Number); var values=List[1,2]:Numbers; print.newline(value); print.newline(values[1]); }";
+    let output = Project::new(source).run();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"7\r\n2\r\n");
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_generic_specializations() {
+    let source = "fun identity<T>(value:T) result:T { result=value; } fun pair<A,B>(value:A,ignored:B) result:A { result=value; } class Box<T>(pub value:T) { fun __new__() {} } fun main() { var number=identity<int>(7); var text=identity<string>(\"hello\"); var selected=pair<i64,string>(9:i64,\"ignored\"); var boxed=Box<i64>(value=selected); print.newline(number); print.newline(text); print.newline(boxed.value); }";
+    let output = Project::new(source).run();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"7\r\nhello\r\n9\r\n");
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_lists_create_read_and_update_elements() {
     let output = Project::new(
         "fun main() { var values=List[1,2,3]; print.newline(values[0]); values[1]=9; print.newline(values[1]); var copy=values; copy[0]=7; print.newline(values[0]); print.newline(copy[0]); }",
