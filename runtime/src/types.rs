@@ -54,17 +54,14 @@ impl Type {
         })
     }
     pub fn from_id(id: u32) -> Option<Self> {
-        if id & 0x1000_0000 != 0 {
-            return Some(Self::List(id & !0x1000_0000));
-        }
-        if id & 0x2000_0000 != 0 {
-            return Some(Self::Optional(id & !0x2000_0000));
-        }
-        if id & 0x8000_0000 != 0 {
-            return Some(Self::Enum(id & 0x7fff_ffff));
-        }
-        if id & 0x4000_0000 != 0 {
-            return Some(Self::Class(id & 0x3fff_ffff));
+        let payload = id >> 3;
+        match id & 7 {
+            1 => return Some(Self::Enum(payload)),
+            2 => return Some(Self::Class(payload)),
+            3 if Self::from_id(payload).is_some() => return Some(Self::Optional(payload)),
+            4 if Self::from_id(payload).is_some() => return Some(Self::List(payload)),
+            0 => (),
+            _ => return None,
         }
         [
             Self::I8,
@@ -83,30 +80,30 @@ impl Type {
             Self::Bool,
             Self::None,
         ]
-        .get(id as usize)
+        .get(payload as usize)
         .copied()
     }
     pub fn id(self) -> u32 {
         match self {
-            Self::I8 => 0,
-            Self::I16 => 1,
-            Self::I32 => 2,
-            Self::I64 => 3,
-            Self::U4 => 4,
-            Self::U8 => 5,
-            Self::U16 => 6,
-            Self::U32 => 7,
-            Self::U64 => 8,
-            Self::F32 => 9,
-            Self::F64 => 10,
-            Self::F128 => 11,
-            Self::String => 12,
-            Self::Bool => 13,
-            Self::None => 14,
-            Self::Enum(id) => 0x8000_0000 | id,
-            Self::Class(id) => 0x4000_0000 | id,
-            Self::Optional(id) => 0x2000_0000 | id,
-            Self::List(id) => 0x1000_0000 | id,
+            Self::I8 => 0 << 3,
+            Self::I16 => 1 << 3,
+            Self::I32 => 2 << 3,
+            Self::I64 => 3 << 3,
+            Self::U4 => 4 << 3,
+            Self::U8 => 5 << 3,
+            Self::U16 => 6 << 3,
+            Self::U32 => 7 << 3,
+            Self::U64 => 8 << 3,
+            Self::F32 => 9 << 3,
+            Self::F64 => 10 << 3,
+            Self::F128 => 11 << 3,
+            Self::String => 12 << 3,
+            Self::Bool => 13 << 3,
+            Self::None => 14 << 3,
+            Self::Enum(id) => (id << 3) | 1,
+            Self::Class(id) => (id << 3) | 2,
+            Self::Optional(id) => (id << 3) | 3,
+            Self::List(id) => (id << 3) | 4,
         }
     }
     pub fn integer(self) -> bool {
@@ -473,5 +470,18 @@ mod tests {
         assert_ne!(none, zero);
         assert_eq!(display(none, optional).unwrap(), "None");
         assert_eq!(display(zero, optional).unwrap(), "0");
+    }
+
+    #[test]
+    fn recursive_type_ids_preserve_every_wrapper() {
+        let nested = Type::Optional(Type::List(Type::List(Type::I32.id()).id()).id());
+        assert_eq!(Type::from_id(nested.id()), Some(nested));
+        let Type::Optional(list) = Type::from_id(nested.id()).unwrap() else {
+            panic!()
+        };
+        let Type::List(inner_list) = Type::from_id(list).unwrap() else {
+            panic!()
+        };
+        assert_eq!(Type::from_id(inner_list), Some(Type::List(Type::I32.id())));
     }
 }

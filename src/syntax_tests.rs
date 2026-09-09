@@ -616,7 +616,7 @@ fn shorthand_function_alias_detection_stays_inside_its_function() {
 #[test]
 fn combines_namespaced_modules_and_use_imports() {
     let files = vec![
-        ("utils".into(), "fun value(a:int) r:int { r=a+1; } fun other() r:int { r=2; } enum State { ready }".into()),
+        ("utils".into(), "fun value(a:int) r:int { r=a+1; } fun other() r:int { r=2; } pub enum State { ready }".into()),
         ("utils/tools".into(), "pack utils; use utils:[value]; fun calculate() r:int { r=value(4); }".into()),
         ("".into(), "pack utils; pack utils/tools; use utils:[value]; fun main() { print.newline(utils:value(1)); print.newline(value(2)); print.newline(utils/tools:calculate()); var state=utils:State.ready; }".into()),
     ];
@@ -640,6 +640,27 @@ fn combines_namespaced_modules_and_use_imports() {
             .unwrap_err()
             .contains("does not export")
     );
+}
+
+#[test]
+fn enforces_enum_visibility_between_modules() {
+    let public_files = vec![
+        ("types".into(), "pub enum State { ready }".into()),
+        ("".into(), "pack types; use types:[State]; fun main() { var state=State.ready; match state { State.ready => {} } }".into()),
+    ];
+    parse_modules(&public_files).unwrap();
+
+    for main in [
+        "pack types; use types:[State]; fun main() {}",
+        "pack types; fun main() { var state=types:State.ready; }",
+    ] {
+        let files = vec![
+            ("types".into(), "enum State { ready }".into()),
+            ("".into(), main.into()),
+        ];
+        let error = parse_modules(&files).unwrap_err();
+        assert!(error.contains("enum 'State' is private"), "{error}");
+    }
 }
 
 #[test]

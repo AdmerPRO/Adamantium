@@ -789,10 +789,8 @@ impl Parser {
             self.symbol('[')?;
             let element = self.type_name()?;
             self.symbol(']')?;
-            if matches!(element, Type::List(_) | Type::Optional(_)) {
-                return Err(position.error(
-                    "nested and optional List types are not supported by the current runtime type representation",
-                ));
+            if element.id() > u32::MAX >> 3 {
+                return Err(position.error("type nesting exceeds the supported depth"));
             }
             return Ok(Type::List(element.id()));
         }
@@ -1512,10 +1510,8 @@ impl Parser {
                 self.symbol(':')?;
                 let mut ty = self.type_name()?;
                 if optional {
-                    if matches!(ty, Type::List(_)) {
-                        return Err(position.error(
-                            "optional List values are not supported by the current runtime type representation",
-                        ));
+                    if ty.id() > u32::MAX >> 3 {
+                        return Err(position.error("type nesting exceeds the supported depth"));
                     }
                     ty = Type::Optional(ty.id());
                 }
@@ -1693,10 +1689,10 @@ impl Parser {
                     ));
                 }
                 if optional {
-                    if matches!(ty, Type::List(_)) {
-                        return Err(field_position.error(
-                            "optional List fields are not supported by the current runtime type representation",
-                        ));
+                    if ty.id() > u32::MAX >> 3 {
+                        return Err(
+                            field_position.error("type nesting exceeds the supported depth")
+                        );
                     }
                     ty = Type::Optional(ty.id());
                 }
@@ -1814,7 +1810,7 @@ pub fn module_dependencies(source: &str) -> Result<Vec<String>, String> {
     Ok(dependencies)
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum ExportKind {
     Function,
     Enum,
@@ -1852,8 +1848,10 @@ pub fn parse_modules(files: &[(String, String)]) -> Result<Program, String> {
                         } else {
                             format!("{}{name}", module_prefix(module))
                         };
+                        let public = kind != ExportKind::Enum
+                            || (index > 0 && tokens[index - 1].0 == Token::Word("pub".into()));
                         if exports
-                            .insert((module.clone(), name.clone()), (canonical, kind))
+                            .insert((module.clone(), name.clone()), (canonical, kind, public))
                             .is_some()
                         {
                             return Err(tokens[index + 1].1.error(format!(
@@ -1923,6 +1921,10 @@ pub fn parse_modules(files: &[(String, String)]) -> Result<Program, String> {
                             .ok_or_else(|| {
                                 position.error(format!("module '{path}' does not export '{name}'"))
                             })?;
+                        if !exported.2 {
+                            return Err(position
+                                .error(format!("enum '{name}' is private in module '{path}'")));
+                        }
                         if local.contains_key(name)
                             || imports.insert(name.clone(), exported).is_some()
                         {
@@ -1962,6 +1964,15 @@ pub fn parse_modules(files: &[(String, String)]) -> Result<Program, String> {
             if tokens[index].0 == Token::End {
                 break;
             }
+            if depth == 0
+                && tokens[index].0 == Token::Word("pub".into())
+                && tokens
+                    .get(index + 1)
+                    .is_some_and(|token| token.0 == Token::Word("enum".into()))
+            {
+                index += 1;
+                continue;
+            }
             let position = tokens[index].1;
             if let Token::Word(first) = &tokens[index].0 {
                 let mut path_parts = vec![first.clone()];
@@ -1976,8 +1987,15 @@ pub fn parse_modules(files: &[(String, String)]) -> Result<Program, String> {
                 }
                 if matches!(tokens.get(cursor), Some((Token::Symbol(':'), _)))
                     && let Some((Token::Word(name), _)) = tokens.get(cursor + 1)
-                    && let Some((canonical, _)) = exports.get(&(path_parts.join("/"), name.clone()))
+                    && let Some((canonical, _, public)) =
+                        exports.get(&(path_parts.join("/"), name.clone()))
                 {
+                    if !public && path_parts.join("/") != module.as_str() {
+                        return Err(position.error(format!(
+                            "enum '{name}' is private in module '{}'",
+                            path_parts.join("/")
+                        )));
+                    }
                     combined.push((Token::Word(canonical.clone()), position));
                     index = cursor + 2;
                     continue;
@@ -1985,7 +2003,7 @@ pub fn parse_modules(files: &[(String, String)]) -> Result<Program, String> {
             }
             let mut token = tokens[index].0.clone();
             if let Token::Word(name) = &token
-                && let Some((canonical, kind)) = local.get(name).or_else(|| imports.get(name))
+                && let Some((canonical, kind, _)) = local.get(name).or_else(|| imports.get(name))
             {
                 let declaration = depth == 0
                     && index > 0
@@ -2060,6 +2078,12 @@ fn parse_tokens(tokens: Vec<(Token, Position)>) -> Result<Program, String> {
     while parser.peek() != &Token::End {
         parser.reject_import()?;
         let position = parser.position();
+        if parser.peek() == &Token::Word("pub".into()) {
+            parser.next();
+            if parser.peek() != &Token::Word("enum".into()) {
+                return Err(position.error("pub is currently supported only for enums"));
+            }
+        }
         if parser.peek() == &Token::Word("define".into()) {
             let name = parser.type_alias_declaration()?;
             if signatures.contains_key(&name) {

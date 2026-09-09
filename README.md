@@ -112,8 +112,8 @@ var empty = List[]:List[int];
 ```
 
 Indexing is checked at runtime. Assigning a list to another variable creates an independent copy.
-Nested lists and optional `List` parameters or fields are currently rejected because they require
-a recursive runtime type representation.
+Lists can be nested and can be used as optional function parameters or class fields. Runtime type
+identifiers preserve each `List` and optional wrapper independently.
 
 Set `ADAMANTIUM_NASM` or `ADAMANTIUM_LINKER` to override a tool's executable
 path. A custom linker must support Microsoft LINK arguments and have access to
@@ -239,6 +239,14 @@ fun main() {
 
 Each enum is a distinct type. Enum values can be assigned, passed to functions,
 returned, and printed. Arithmetic and `clamp` are not supported for enums.
+Enums are private to their module by default. Add `pub` to export one:
+
+```text
+pub enum State { ready, stopped }
+```
+
+Other modules may then import it with `use` or access it as `module:State.variant`. Private enum
+access from another module is a compile error. Enum variants can be used as `match` patterns.
 
 ### Generics
 
@@ -550,7 +558,7 @@ print.newline(options.value); // None
 Required function parameters must come before optional ones. Strings and `f128` values preserve
 their complete value when optional. Optional nested class values can be omitted or accessed like
 ordinary objects; accessing a field or method through `None` produces a runtime error.
-`List` values cannot currently be optional.
+`List` values can be optional and nested.
 
 ### Panic and warnings
 
@@ -573,13 +581,12 @@ returns that variable. `return r;` exits early and always refers to the result
 name declared in the signature; arbitrary return expressions are not supported.
 
 Functions can be declared before or after `main`, called from other functions,
-and nested inside expressions. Arguments are evaluated left to right and passed
+called recursively, and nested inside expressions. Arguments are evaluated left to right and passed
 by value. Each call has its own local variables; changing a parameter does not
 change the caller's variable. Parameters and results accept every type listed
 above, including strings, booleans, and `f128`. A `None` result starts as `None`,
 so `fun notify() result:None { print.newline("Done"); }` needs no assignment.
-`main` cannot be called by another function. Loops, conditionals, imports, and
-packages are not implemented yet.
+`main` cannot be called by another function.
 
 Division by zero, signed arithmetic overflow, and reversed clamp bounds stop the
 EXE with a diagnostic on stderr and exit code 2. Output failures use exit code 1.

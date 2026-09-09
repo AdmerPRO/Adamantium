@@ -11,6 +11,20 @@ static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_nested_lists_optional_lists_and_recursion() {
+    let source = "fun sum(n:int) result:int { if n==0 then { result=0; return result; } result=n+sum(n-1); } fun optional($values:List[int]) result:None {} fun main() { var nested=List[List[1,2],List[3,4]]; optional(); optional(nested[0]); print.newline(nested[1][0]); print.newline(sum(5)); }";
+    let output = Project::new(source).run();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"3\r\n15\r\n");
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_class_lifecycle_hooks_run_in_order() {
     let source = "class Counter(pub value:int) { fun __new__() { print.newline(\"new\"); } fun __change__() { print.newline(\"change\"); } fun __remove__() { print.newline(\"remove\"); } } fun main() { var counter=Counter(value=1); counter.value=2; counter.remove; }";
     let output = Project::new(source).run();
@@ -266,7 +280,7 @@ fn native_panic_reports_source_line_and_stops() {
 fn native_optional_enums_methods_and_matching() {
     let output = Project::new(
         r#"
-        enum Choice { first, second }
+        pub enum Choice { first, second }
         class Reporter(pub &value:int) {
             fun __new__() {}
             pub fun report($fallback:int) result:None {
@@ -332,7 +346,7 @@ fn native_multifile_pack_qualified_calls_and_use_imports() {
     fs::write(
         project.0.join("code/utils.ad"),
         r#"
-        enum Choice { first, second }
+        pub enum Choice { first, second }
         class Box(pub value:int) { fun __new__() {} }
         fun add(a:int,b:int) result:int { result=a+b; }
     "#,

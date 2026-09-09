@@ -311,7 +311,7 @@ true
 * [x] Add optional-value type checking
 * [x] Prevent arithmetic and other unsafe access to optional values
 * [x] Support optional strings, f128 values and nested class values
-* [ ] Add a recursive type representation for nested and optional `List` values
+* [x] Add a recursive type representation for nested and optional `List` values
 
 ---
 
@@ -334,7 +334,7 @@ fun add(a:int, b:int) r:int {
 * [x] Implement early returns
 * [x] Implement `None` return type
 * [x] Implement function calls
-* [ ] Implement recursion
+* [x] Implement recursion
 * [x] Implement function values — `var callable = function();` and explicit `as_variable`
 
 ---
@@ -379,7 +379,7 @@ priv
 * [ ] Implement `pub`
 * [ ] Implement `priv`
 * [ ] Implement public classes
-* [ ] Implement public enums
+* [x] Implement public enums
 * [ ] Prevent access to private symbols from other modules
 * [x] Make `main` special and not require `pub`
 
@@ -497,9 +497,9 @@ enum Direction {
 * [x] Implement enum variants
 * [x] Implement enum values — assignment, function arguments/results and numeric-index printing
 * [x] Implement enum comparison — `==` and `!=`
-* [ ] Implement enum matching
-* [ ] Implement public enums
-* [ ] Prevent access to private enums from other modules
+* [x] Implement enum matching
+* [x] Implement public enums
+* [x] Prevent access to private enums from other modules
 
 ---
 
