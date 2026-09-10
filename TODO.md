@@ -1130,6 +1130,9 @@ Adamantium must remain memory-safe.
 * [x] Generate scalar aliases and disconnection copies
 * [ ] Generate async support
 * [x] Generate runtime calls
+* [x] Bundle NASM 3.02 in the portable Windows distribution
+* [x] Discover bundled `tools/nasm.exe` automatically
+* [ ] Remove the remaining Visual Studio linker and Windows SDK requirement
 * [ ] Add optimization passes
 * [x] Validate generated assembly — NASM assembly and native EXE regression tests
 
@@ -1219,14 +1222,14 @@ Create the official standard library.
 # 50. Tooling
 
 * [ ] `adamantium fmt`
-* [ ] `adamantium test`
-* [ ] `adamantium check`
+* [x] `adamantium test`
+* [x] `adamantium check`
 * [x] `adamantium build`
 * [x] `adamantium run`
 * [ ] `adamantium install`
 * [ ] `adamantium clean`
 * [ ] `adamantium doctor`
-* [ ] `adamantium new`
+* [x] `adamantium new`
 * [ ] `adamantium init`
 
 ---
@@ -1246,8 +1249,12 @@ Create the official standard library.
 * [x] Test Linux — compiler build/tests configured; no Linux program backend
 * [x] Test macOS — compiler build/tests configured; no macOS program backend
 * [ ] Build documentation
-* [ ] Create release workflow
-* [ ] Publish release artifacts
+* [x] Create portable Windows packaging workflow — manual runs and version tags
+* [x] Publish portable ZIP as a GitHub Actions artifact
+* [x] Build a standalone CLI that does not require Rust on user machines
+* [x] Bundle and checksum the official NASM Windows binary
+* [ ] Publish installer
+* [ ] Publish packages directly on GitHub Releases
 
 ---
 
@@ -1319,6 +1326,12 @@ Create clear compiler diagnostics.
 # 56. Release System
 
 * [ ] Define semantic versioning
+* [x] Create portable Windows ZIP packaging
+* [x] Add pinned SHA-256 verification for bundled NASM
+* [x] Include the NASM BSD 2-Clause license in distributions
+* [x] Build the Windows CLI with the static CRT
+* [ ] Bundle a linker and required Windows libraries
+* [ ] Create Windows installer
 * [ ] Create release channels
 * [ ] Stable releases
 * [ ] Development releases
@@ -1399,15 +1412,15 @@ The recommended implementation order is:
 20. [x] Linker integration
 21. [x] `adamantium build`
 22. [x] `adamantium run`
-23. [ ] `adamantium check`
-24. [ ] Test system
+23. [x] `adamantium check`
+24. [x] Test system
 25. [ ] `AdamantiumFiles`
 26. [ ] `AdamantiumJson`
 27. [ ] Package manager
 28. [ ] `adamantium-async`
 29. [ ] Async compiler support
-30. [ ] Generics
-31. [ ] Traits
+30. [x] Generics
+31. [x] Traits
 32. [ ] Optimization
 33. [ ] Documentation
 34. [ ] VS Code support
