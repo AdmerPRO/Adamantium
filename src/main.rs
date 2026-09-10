@@ -453,6 +453,16 @@ fn emit_executable(
     fs::write(&runtime, runtime_bytes).map_err(|e| e.to_string())?;
     fs::write(&asm, codegen::assembly_entry(statements, entry)).map_err(|e| e.to_string())?;
     let nasm = env::var_os("ADAMANTIUM_NASM").unwrap_or_else(|| {
+        let bundled = env::current_exe().ok().and_then(|executable| {
+            executable
+                .parent()
+                .map(|parent| parent.join("tools/nasm.exe"))
+        });
+        if let Some(bundled) = bundled
+            && bundled.is_file()
+        {
+            return bundled.into_os_string();
+        }
         let installed = PathBuf::from(
             env::var_os("ProgramFiles").unwrap_or_else(|| "C:\\Program Files".into()),
         )

@@ -9,6 +9,28 @@ and builds a native Windows x64 console executable.
 - NASM on PATH or installed in `%ProgramFiles%\NASM`
 - Visual Studio C++ build tools and the Windows SDK
 
+## Portable Windows package
+
+The `Portable Windows package` GitHub Actions workflow creates
+`adamantium-windows-x86_64.zip`. It contains a release build of
+`adamantium.exe` and NASM 3.02, so users do not need Rust or a separate NASM
+installation. Extract the archive, add its directory to `PATH`, and run
+`adamantium --version`.
+
+The compiler searches for `tools/nasm.exe` next to its executable before
+checking the usual NASM installation paths. Visual Studio C++ Build Tools and
+the Windows SDK are still required to link generated Adamantium programs. A
+future installer can install the same portable directory and update `PATH`.
+
+Maintainers can produce the ZIP locally from PowerShell:
+
+```powershell
+./scripts/package-windows.ps1
+```
+
+The packaging script downloads the official NASM archive, verifies its pinned
+SHA-256 checksum, and includes its BSD 2-Clause license.
+
 ## Usage
 
 Install the CLI from the `compiler` directory:
