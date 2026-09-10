@@ -118,6 +118,7 @@ pub enum Statement {
     Match(Expr, Vec<(Expr, Vec<Statement>)>, Option<Vec<Statement>>),
     Break,
     Continue,
+    Exit,
     Return,
 }
 #[derive(Debug)]
@@ -713,6 +714,7 @@ impl Parser {
                     "and",
                     "panic",
                     "warn",
+                    "exit",
                     "define",
                     "trait",
                     "implements",
@@ -1281,6 +1283,11 @@ impl Parser {
                 self.symbol(')')?;
                 Statement::Message(message, word == "panic", position)
             }
+            Token::Word(word) if word == "exit" => {
+                self.symbol('(')?;
+                self.symbol(')')?;
+                Statement::Exit
+            }
             Token::Word(word) if word == "return" => {
                 let Some(result_name) = self.result_name.clone() else {
                     return Err(position.error("main has no named result to return"));
@@ -1648,7 +1655,7 @@ impl Parser {
         while self.peek() != &Token::Symbol('}') {
             positions.push(self.position());
             let statement = self.statement()?;
-            returned |= matches!(statement, Statement::Return);
+            returned |= matches!(statement, Statement::Return | Statement::Exit);
             statements.push(statement);
         }
         if !returned && let Some(name) = &self.result_name {

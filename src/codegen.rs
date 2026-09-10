@@ -1,6 +1,6 @@
 use crate::{
     syntax::{Comparison, LogicalOperator, Operator},
-    typed::{Expression, Function, Instruction, Kind, Program},
+    typed::{ClassInfo, Expression, Function, Instruction, Kind, Program},
     types::Type,
 };
 
@@ -10,6 +10,7 @@ struct Generator {
     next_slot: usize,
     max_slot: usize,
     class_sizes: Vec<usize>,
+    classes: Vec<ClassInfo>,
     next_label: usize,
     loop_stack: Vec<(String, String)>,
 }
@@ -49,6 +50,50 @@ impl Generator {
         let slot = self.reserve(1);
         self.store(slot);
         slot
+    }
+    fn print_loaded(&mut self, ty: Type, newline: bool) {
+        let slot = self.save();
+        self.emit(format!(
+            "    lea rcx, {}\n    mov edx, {}\n    mov r8d, {}\n    call ad_print\n    test eax, eax\n    jnz ad_exit_error",
+            memory(slot, 0),
+            ty.id(),
+            u8::from(newline)
+        ));
+    }
+    fn print_text(&mut self, text: &str, newline: bool) {
+        let index = self.data.len();
+        self.data.push(text.as_bytes().to_vec());
+        self.emit(format!(
+            "    lea rax, [rel ad_string_{index}]\n    mov rdx, {}",
+            text.len()
+        ));
+        self.print_loaded(Type::String, newline);
+    }
+    fn print_class(&mut self, value: &Expression, id: u32, newline: bool) {
+        self.expression(value);
+        let object = self.save();
+        let class = self.classes[id as usize].clone();
+        self.print_text(&format!("{}(", class.name), false);
+        let mut first = true;
+        for (index, field) in class.fields.iter().enumerate() {
+            if !field.public {
+                continue;
+            }
+            if !first {
+                self.print_text(", ", false);
+            }
+            first = false;
+            self.print_text(&format!("{}=", field.name), false);
+            self.load(object);
+            self.emit("    mov r11, rax");
+            self.emit(format!(
+                "    mov rax, [r11 + {}]\n    mov rdx, [r11 + {}]",
+                index * 16,
+                index * 16 + 8
+            ));
+            self.print_loaded(field.ty, false);
+        }
+        self.print_text(")", newline);
     }
     fn clone_class(&mut self, ty: Type) {
         match ty {
@@ -322,9 +367,12 @@ impl Generator {
                     self.store(*slot);
                 }
                 Instruction::Print(value, newline) => {
-                    self.expression(value);
-                    let slot = self.save();
-                    self.emit(format!("    lea rcx, {}\n    mov edx, {}\n    mov r8d, {}\n    call ad_print\n    test eax, eax\n    jnz ad_exit_error",memory(slot,0),value.ty.id(),u8::from(*newline)));
+                    if let Type::Class(id) = value.ty {
+                        self.print_class(value, id, *newline);
+                    } else {
+                        self.expression(value);
+                        self.print_loaded(value.ty, *newline);
+                    }
                 }
                 Instruction::Message(message, panic, line) => {
                     self.expression(message);
@@ -340,6 +388,7 @@ impl Generator {
                     }
                 }
                 Instruction::Call(expr) => self.expression(expr),
+                Instruction::Exit => self.emit("    xor ecx, ecx\n    call ExitProcess"),
                 Instruction::SetField(object, index, value, hook) => {
                     self.expression(object);
                     let receiver = self.save();
@@ -543,6 +592,7 @@ pub fn assembly(program: &Program) -> String {
         next_slot: 0,
         max_slot: 0,
         class_sizes: program.class_sizes.clone(),
+        classes: program.classes.clone(),
         next_label: 0,
         loop_stack: Vec::new(),
     };

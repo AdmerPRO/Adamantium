@@ -153,6 +153,11 @@ Declare variables with `var a = 10;` and print them with `print.newline(a);` or
 underscore, and may then contain digits. Declare each name once before using it.
 Keywords, mutability modifiers, and type names are reserved words.
 
+`exit();` immediately ends the program with exit code `0` and writes nothing to
+stdout or stderr. Code after it is unreachable. Classes can be printed directly;
+their name and public fields are shown as `MyClass(field=value)`. Private fields
+are omitted, and lists use `[value, value]` formatting.
+
 ### Types and inference
 
 | Family | Supported types | Default / alias |

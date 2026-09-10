@@ -413,8 +413,24 @@ pub fn display(value: Value, ty: Type) -> Result<String, String> {
         Type::Bool => if value.lo == 0 { "false" } else { "true" }.into(),
         Type::None => "None".into(),
         Type::Enum(_) => value.lo.to_string(),
-        Type::Class(_) | Type::List(_) => {
-            return Err(format!("{ty} values cannot be printed directly"));
+        Type::Class(_) => "<object>".into(),
+        Type::List(inner) => {
+            if value.lo == 0 && value.hi == 0 {
+                "[]".into()
+            } else {
+                if value.lo == 0 {
+                    return Err("invalid List pointer".into());
+                }
+                let inner = Type::from_id(inner).ok_or("invalid List element type")?;
+                let values = unsafe {
+                    std::slice::from_raw_parts(value.lo as *const Value, value.hi as usize)
+                };
+                let items = values
+                    .iter()
+                    .map(|value| display(*value, inner))
+                    .collect::<Result<Vec<_>, _>>()?;
+                format!("[{}]", items.join(", "))
+            }
         }
         Type::Optional(inner) => {
             if value.hi == 0 {

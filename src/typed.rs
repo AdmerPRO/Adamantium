@@ -52,6 +52,7 @@ pub enum Instruction {
     ),
     Break,
     Continue,
+    Exit,
     Return,
 }
 pub struct Function {
@@ -65,6 +66,18 @@ pub struct Function {
 pub struct Program {
     pub functions: Vec<Function>,
     pub class_sizes: Vec<usize>,
+    pub classes: Vec<ClassInfo>,
+}
+#[derive(Clone)]
+pub struct ClassInfo {
+    pub name: String,
+    pub fields: Vec<ClassFieldInfo>,
+}
+#[derive(Clone)]
+pub struct ClassFieldInfo {
+    pub name: String,
+    pub ty: Type,
+    pub public: bool,
 }
 struct Signature {
     parameters: Vec<Type>,
@@ -132,6 +145,22 @@ pub fn check(program: &syntax::Program) -> Result<Program, String> {
             .classes
             .iter()
             .map(|class| class.fields.len())
+            .collect(),
+        classes: program
+            .classes
+            .iter()
+            .map(|class| ClassInfo {
+                name: class.name.clone(),
+                fields: class
+                    .fields
+                    .iter()
+                    .map(|field| ClassFieldInfo {
+                        name: field.name.clone(),
+                        ty: field.ty,
+                        public: field.public,
+                    })
+                    .collect(),
+            })
             .collect(),
     })
 }
@@ -748,6 +777,7 @@ impl Checker<'_> {
                 position.line(),
             ),
             Statement::Return => Instruction::Return,
+            Statement::Exit => Instruction::Exit,
             Statement::Call(call) => {
                 let signature = &self.signatures[&call.name];
                 let arguments = self.arguments(&call.arguments, &signature.parameters)?;

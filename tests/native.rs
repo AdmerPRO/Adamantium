@@ -11,6 +11,42 @@ static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_exit_is_successful_and_silent() {
+    let project = Project::new("fun main() { exit(); panic(\"must not run\"); }");
+    let build = Command::new(env!("CARGO_BIN_EXE_adamantium"))
+        .arg("build")
+        .arg(&project.0)
+        .output()
+        .unwrap();
+    assert!(
+        build.status.success(),
+        "{}",
+        String::from_utf8_lossy(&build.stderr)
+    );
+    let output = Command::new(project.0.join("target/NativeTest.exe"))
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    assert!(output.stdout.is_empty());
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_prints_class_names_and_public_fields() {
+    let source = r#"class Item(pub number:int,secret:string,pub values:List[int]) { fun __new__() {} } fun main() { var item=Item(number=7,secret="hidden",values=List[1,2]); print.newline(item); }"#;
+    let output = Project::new(source).run();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"Item(number=7, values=[1, 2])\r\n");
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_traits_and_trait_constrained_generics() {
     let source = r#"
         trait Printable { fun render() result:int; }

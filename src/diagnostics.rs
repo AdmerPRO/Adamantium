@@ -13,7 +13,9 @@ pub fn warnings(program: &Program) -> Vec<String> {
         for (statement, position) in function.statements.iter().zip(&function.positions) {
             if returned {
                 if !warned_unreachable {
-                    warnings.push(position.error("warning[W001]: unreachable code after return"));
+                    warnings.push(
+                        position.error("warning[W001]: unreachable code after program termination"),
+                    );
                     warned_unreachable = true;
                 }
                 continue;
@@ -89,7 +91,7 @@ pub fn warnings(program: &Program) -> Vec<String> {
                     }
                 }
                 Statement::Break | Statement::Continue => (),
-                Statement::Return => returned = true,
+                Statement::Return | Statement::Exit => returned = true,
             }
         }
         // A named result is read by both explicit and implicit return.
@@ -261,7 +263,7 @@ fn visit_statement(
                 }
             }
         }
-        Statement::Break | Statement::Continue | Statement::Return => (),
+        Statement::Break | Statement::Continue | Statement::Exit | Statement::Return => (),
     }
 }
 fn visit_call(call: &Call, reads: &mut HashSet<usize>, calls: &mut HashSet<String>) {
@@ -292,6 +294,16 @@ mod tests {
         );
         assert!(result.iter().any(|s| s.contains("unused function 'dead'")));
         assert_eq!(result.len(), 3);
+    }
+
+    #[test]
+    fn exit_makes_following_code_unreachable() {
+        let result = analyze("fun main() { exit(); print.newline(1); }");
+        assert!(
+            result
+                .iter()
+                .any(|warning| warning.contains("warning[W001]"))
+        );
     }
     #[test]
     fn follows_calls_and_reports_disconnected_cycles() {

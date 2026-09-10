@@ -648,7 +648,7 @@ exit(code = 45);
 * [x] Implement normal program termination
 * [x] Implement exit codes — automatic codes 0, 1, and 2; explicit exit API is pending
 * [x] Return exit code to operating system
-* [ ] Ensure `exit()` produces no error output
+* [x] Ensure `exit()` produces no error output
 
 ---
 
@@ -666,7 +666,7 @@ print.sameline("Hello ");
 * [x] Support strings — UTF-8 literals and string variables
 * [x] Support numbers — signed/unsigned integers and f32/f64/f128
 * [x] Support booleans
-* [ ] Support objects where appropriate
+* [x] Support objects where appropriate â€” classes print their names and public fields
 * [x] Reject invalid `print(...)` syntax
 
 ---
