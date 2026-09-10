@@ -11,6 +11,31 @@ static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_traits_and_trait_constrained_generics() {
+    let source = r#"
+        trait Printable { fun render() result:int; }
+        class Number(pub value:int) implements Printable {
+            fun __new__() {}
+            pub fun render() result:int { result=self.value; }
+        }
+        fun render_value<T:Printable>(value:T) result:int { result=value.render(); }
+        fun main() {
+            var number=Number(value=17);
+            print.newline(render_value<Number>(number));
+        }
+    "#;
+    let output = Project::new(source).run();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"17\r\n");
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_nested_lists_optional_lists_and_recursion() {
     let source = "fun sum(n:int) result:int { if n==0 then { result=0; return result; } result=n+sum(n-1); } fun optional($values:List[int]) result:None {} fun main() { var nested=List[List[1,2],List[3,4]]; optional(); optional(nested[0]); print.newline(nested[1][0]); print.newline(sum(5)); }";
     let output = Project::new(source).run();

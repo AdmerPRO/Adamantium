@@ -664,6 +664,49 @@ fn enforces_enum_visibility_between_modules() {
 }
 
 #[test]
+fn validates_traits_implementations_and_generic_constraints() {
+    let source = r#"
+        trait Printable { fun render(prefix:string) result:string; }
+        class Document(pub text:string) implements Printable {
+            fun __new__() {}
+            pub fun render(prefix:string) result:string { result=self.text; }
+        }
+        fun render_value<T:Printable>(value:T,prefix:string) result:string { result=value.render(prefix); }
+        fun main() {
+            var document=Document(text="hello");
+            print.newline(render_value<Document>(document,"prefix"));
+        }
+    "#;
+    assert!(parse(source).is_ok());
+
+    for (source, expected) in [
+        (
+            "trait T { fun work() result:None; } class C() implements T { fun __new__() {} } fun main() {}",
+            "missing method 'work'",
+        ),
+        (
+            "trait T { fun work() result:None; } class C() implements T { fun __new__() {} fun work() result:None {} } fun main() {}",
+            "must be public",
+        ),
+        (
+            "trait T { fun work(value:int) result:None; } class C() implements T { fun __new__() {} pub fun work(value:string) result:None {} } fun main() {}",
+            "does not match the required signature",
+        ),
+        (
+            "trait T { fun work() result:None; } class C() implements Missing { fun __new__() {} } fun main() {}",
+            "trait 'Missing' is not declared",
+        ),
+        (
+            "trait T { fun work() result:None; } class C() { fun __new__() {} pub fun work() result:None {} } fun keep<X:T>(value:X) result:X { result=value; } fun main() { var c=C(); var kept=keep<C>(c); }",
+            "does not satisfy generic constraint 'T'",
+        ),
+    ] {
+        let error = parse(source).unwrap_err();
+        assert!(error.contains(expected), "{error}");
+    }
+}
+
+#[test]
 fn parses_list_literals_indexing_and_assignment() {
     let statements = main_statements(
         "fun main() { var values = List[1, 2, 3]; values[1] = 9; print.newline(values[1]); }",

@@ -808,13 +808,13 @@ var stc a = 10:i32;
 
 # 31. Traits / Interfaces
 
-* [ ] Design `trait` syntax
-* [ ] Implement traits
-* [ ] Implement trait methods
-* [ ] Implement trait requirements
-* [ ] Implement `implements`
-* [ ] Implement trait type checking
-* [ ] Implement trait-based generic constraints
+* [x] Design `trait` syntax
+* [x] Implement traits
+* [x] Implement trait methods
+* [x] Implement trait requirements
+* [x] Implement `implements`
+* [x] Implement trait type checking
+* [x] Implement trait-based generic constraints
 
 ---
 

@@ -151,6 +151,7 @@ pub struct ClassDefinition {
     pub name: String,
     pub fields: Vec<ClassField>,
     pub methods: Vec<ClassMethod>,
+    pub traits: Vec<String>,
 }
 #[derive(Debug)]
 pub struct Program {
@@ -173,6 +174,15 @@ struct EnumDefinition {
     ty: Type,
     variants: HashMap<String, u32>,
 }
+#[derive(Clone)]
+struct TraitMethod {
+    name: String,
+    parameters: Vec<Type>,
+    result: Type,
+}
+struct TraitDefinition {
+    methods: Vec<TraitMethod>,
+}
 struct Parser {
     tokens: Vec<(Token, Position)>,
     cursor: usize,
@@ -183,6 +193,7 @@ struct Parser {
     declarations: Vec<(String, Position)>,
     enums: HashMap<String, EnumDefinition>,
     classes: HashMap<String, ClassDefinition>,
+    traits: HashMap<String, TraitDefinition>,
     type_aliases: HashMap<String, Type>,
     loop_depth: usize,
     lifecycle_hook: Option<String>,
@@ -317,6 +328,7 @@ fn lex(source: &str) -> Result<Vec<(Token, Position)>, String> {
 #[derive(Clone)]
 struct GenericTemplate {
     name: String,
+    class: bool,
     parameters: Vec<(String, Option<String>)>,
     tokens: Vec<PositionedToken>,
     start: usize,
@@ -378,6 +390,8 @@ fn validate_generic_constraint(
     argument: &[(Token, Position)],
     constraint: Option<&str>,
     position: Position,
+    traits: &HashSet<String>,
+    implementations: &HashSet<(String, String)>,
 ) -> Result<(), String> {
     let name = generic_type_name(argument);
     let accepted = match constraint {
@@ -405,6 +419,9 @@ fn validate_generic_constraint(
         ),
         Some("float") => matches!(name.as_str(), "f32" | "f64" | "f128" | "float"),
         Some("comparable") => !matches!(name.as_str(), "None") && !name.starts_with("List["),
+        Some(other) if traits.contains(other) => {
+            implementations.contains(&(name.clone(), other.to_string()))
+        }
         Some(other) => return Err(position.error(format!("unknown generic constraint '{other}'"))),
     };
     if accepted {
@@ -418,6 +435,38 @@ fn validate_generic_constraint(
 }
 
 fn expand_generics(tokens: Vec<(Token, Position)>) -> Result<Vec<(Token, Position)>, String> {
+    let traits = tokens
+        .windows(2)
+        .filter_map(|tokens| match (&tokens[0].0, &tokens[1].0) {
+            (Token::Word(keyword), Token::Word(name)) if keyword == "trait" => Some(name.clone()),
+            _ => None,
+        })
+        .collect::<HashSet<_>>();
+    let mut implementations = HashSet::new();
+    for index in 0..tokens.len().saturating_sub(2) {
+        if tokens[index].0 != Token::Word("class".into()) {
+            continue;
+        }
+        let Token::Word(class) = &tokens[index + 1].0 else {
+            continue;
+        };
+        let Some(implements) = (index + 2..tokens.len())
+            .take_while(|cursor| tokens[*cursor].0 != Token::Symbol('{'))
+            .find(|cursor| tokens[*cursor].0 == Token::Word("implements".into()))
+        else {
+            continue;
+        };
+        for (token, _) in &tokens[implements + 1..] {
+            match token {
+                Token::Word(trait_name) => {
+                    implementations.insert((class.clone(), trait_name.clone()));
+                }
+                Token::Symbol(',') => (),
+                Token::Symbol('{') => break,
+                _ => break,
+            }
+        }
+    }
     let mut templates = Vec::new();
     let mut depth = 0usize;
     let mut index = 0usize;
@@ -478,6 +527,7 @@ fn expand_generics(tokens: Vec<(Token, Position)>) -> Result<Vec<(Token, Positio
             template_tokens.drain(2..header_end - index);
             templates.push(GenericTemplate {
                 name: name.clone(),
+                class: tokens[index].0 == Token::Word("class".into()),
                 parameters,
                 tokens: template_tokens,
                 start: index,
@@ -517,7 +567,13 @@ fn expand_generics(tokens: Vec<(Token, Position)>) -> Result<Vec<(Token, Positio
                     )));
                 }
                 for (argument, (_, constraint)) in arguments.iter().zip(&template.parameters) {
-                    validate_generic_constraint(argument, constraint.as_deref(), tokens[index].1)?;
+                    validate_generic_constraint(
+                        argument,
+                        constraint.as_deref(),
+                        tokens[index].1,
+                        &traits,
+                        &implementations,
+                    )?;
                 }
                 let suffix = arguments
                     .iter()
@@ -545,9 +601,15 @@ fn expand_generics(tokens: Vec<(Token, Position)>) -> Result<Vec<(Token, Positio
     }
 
     let end_token = rewritten.pop().filter(|token| token.0 == Token::End);
-    let mut generated = Vec::new();
+    let mut generated_classes = Vec::new();
+    let mut generated_functions = Vec::new();
     for template in &templates {
         for (specialized, arguments) in instances.remove(&template.name).unwrap_or_default() {
+            let generated = if template.class {
+                &mut generated_classes
+            } else {
+                &mut generated_functions
+            };
             let substitutions = template
                 .parameters
                 .iter()
@@ -567,8 +629,9 @@ fn expand_generics(tokens: Vec<(Token, Position)>) -> Result<Vec<(Token, Positio
             }
         }
     }
-    generated.extend(rewritten);
-    let mut rewritten = generated;
+    generated_classes.extend(rewritten);
+    generated_classes.extend(generated_functions);
+    let mut rewritten = generated_classes;
     rewritten.push(end_token.unwrap_or((Token::End, Position { line: 1, column: 1 })));
     Ok(rewritten)
 }
@@ -651,6 +714,8 @@ impl Parser {
                     "panic",
                     "warn",
                     "define",
+                    "trait",
+                    "implements",
                 ]
                 .contains(&name.as_str())
                     && Type::parse(&name).is_none() =>
@@ -811,6 +876,7 @@ impl Parser {
         if self.type_aliases.contains_key(&name)
             || self.enums.contains_key(&name)
             || self.classes.contains_key(&name)
+            || self.traits.contains_key(&name)
         {
             return Err(position.error(format!("type name '{name}' is already declared")));
         }
@@ -1616,6 +1682,9 @@ impl Parser {
         if self.type_aliases.contains_key(&name) {
             return Err(position.error(format!("'{name}' is already declared as a type alias")));
         }
+        if self.traits.contains_key(&name) {
+            return Err(position.error(format!("'{name}' is already declared as a trait")));
+        }
         self.symbol('{')?;
         let mut variants = HashMap::new();
         if self.peek() == &Token::Symbol('}') {
@@ -1650,6 +1719,71 @@ impl Parser {
         );
         Ok(name)
     }
+    fn trait_declaration(&mut self) -> Result<String, String> {
+        self.word("trait")?;
+        let position = self.position();
+        let name = self.name()?;
+        if self.traits.contains_key(&name)
+            || self.classes.contains_key(&name)
+            || self.enums.contains_key(&name)
+            || self.type_aliases.contains_key(&name)
+        {
+            return Err(position.error(format!("type name '{name}' is already declared")));
+        }
+        self.symbol('{')?;
+        let mut methods = Vec::new();
+        while !self.take(Token::Symbol('}')) {
+            let method_position = self.position();
+            self.word("fun")?;
+            let method_name = self.name()?;
+            if matches!(
+                method_name.as_str(),
+                "__new__" | "__change__" | "__remove__"
+            ) {
+                return Err(method_position.error("lifecycle hooks cannot be trait requirements"));
+            }
+            self.symbol('(')?;
+            let mut parameters = Vec::new();
+            if !self.take(Token::Symbol(')')) {
+                loop {
+                    let optional = self.take(Token::Symbol('$'));
+                    self.name()?;
+                    self.symbol(':')?;
+                    let mut ty = self.type_name()?;
+                    if optional {
+                        ty = Type::Optional(ty.id());
+                    }
+                    parameters.push(ty);
+                    if self.take(Token::Symbol(')')) {
+                        break;
+                    }
+                    self.symbol(',')?;
+                }
+            }
+            self.name()?;
+            self.symbol(':')?;
+            let result = self.type_name()?;
+            self.symbol(';')?;
+            if methods
+                .iter()
+                .any(|method: &TraitMethod| method.name == method_name)
+            {
+                return Err(method_position
+                    .error(format!("trait method '{method_name}' is declared twice")));
+            }
+            methods.push(TraitMethod {
+                name: method_name,
+                parameters,
+                result,
+            });
+        }
+        if methods.is_empty() {
+            return Err(position.error("trait must require at least one method"));
+        }
+        self.traits
+            .insert(name.clone(), TraitDefinition { methods });
+        Ok(name)
+    }
     fn class_declaration(&mut self) -> Result<Vec<Function>, String> {
         self.word("class")?;
         let position = self.position();
@@ -1663,6 +1797,9 @@ impl Parser {
         if self.type_aliases.contains_key(&name) {
             return Err(position.error(format!("'{name}' is already declared as a type alias")));
         }
+        if self.traits.contains_key(&name) {
+            return Err(position.error(format!("'{name}' is already declared as a trait")));
+        }
         let id = self.classes.len() as u32;
         self.classes.insert(
             name.clone(),
@@ -1671,6 +1808,7 @@ impl Parser {
                 name: name.clone(),
                 fields: Vec::new(),
                 methods: Vec::new(),
+                traits: Vec::new(),
             },
         );
         self.symbol('(')?;
@@ -1716,6 +1854,28 @@ impl Parser {
             }
         }
         self.classes.get_mut(&name).unwrap().fields = fields;
+        let mut implemented_traits = Vec::new();
+        if self.take(Token::Word("implements".into())) {
+            loop {
+                let trait_position = self.position();
+                let trait_name = self.name()?;
+                if !self.traits.contains_key(&trait_name) {
+                    return Err(
+                        trait_position.error(format!("trait '{trait_name}' is not declared"))
+                    );
+                }
+                if implemented_traits.contains(&trait_name) {
+                    return Err(
+                        trait_position.error(format!("trait '{trait_name}' is implemented twice"))
+                    );
+                }
+                implemented_traits.push(trait_name);
+                if !self.take(Token::Symbol(',')) {
+                    break;
+                }
+            }
+        }
+        self.classes.get_mut(&name).unwrap().traits = implemented_traits.clone();
         self.symbol('{')?;
         let mut functions = Vec::new();
         let mut methods = Vec::new();
@@ -1760,6 +1920,43 @@ impl Parser {
         self.symbol('}')?;
         if !has_constructor {
             return Err(position.error(format!("class '{name}' must declare fun __new__()")));
+        }
+        for trait_name in &implemented_traits {
+            for requirement in &self.traits[trait_name].methods {
+                let method = methods
+                    .iter()
+                    .find(|method| method.name == requirement.name)
+                    .ok_or_else(|| {
+                        position.error(format!(
+                            "class '{name}' implements '{trait_name}' but is missing method '{}'",
+                            requirement.name
+                        ))
+                    })?;
+                if !method.public {
+                    return Err(position.error(format!(
+                        "trait method '{}.{}' must be public",
+                        trait_name, requirement.name
+                    )));
+                }
+                let function = functions
+                    .iter()
+                    .find(|function| function.name == method.function)
+                    .unwrap();
+                let parameters = function.types[1..function.parameters]
+                    .iter()
+                    .map(|ty| ty.unwrap())
+                    .collect::<Vec<_>>();
+                let result = function
+                    .result
+                    .map(|slot| function.types[slot].unwrap())
+                    .unwrap_or(Type::None);
+                if parameters != requirement.parameters || result != requirement.result {
+                    return Err(position.error(format!(
+                        "method '{}.{}' does not match the required signature",
+                        trait_name, requirement.name
+                    )));
+                }
+            }
         }
         self.classes.get_mut(&name).unwrap().methods = methods;
         Ok(functions)
@@ -1816,6 +2013,7 @@ enum ExportKind {
     Enum,
     Class,
     TypeAlias,
+    Trait,
 }
 
 fn module_prefix(module: &str) -> String {
@@ -1834,14 +2032,18 @@ pub fn parse_modules(files: &[(String, String)]) -> Result<Program, String> {
                 Token::Symbol('}') => depth -= 1,
                 Token::Word(keyword)
                     if depth == 0
-                        && matches!(keyword.as_str(), "fun" | "enum" | "class" | "define") =>
+                        && matches!(
+                            keyword.as_str(),
+                            "fun" | "enum" | "class" | "define" | "trait"
+                        ) =>
                 {
                     if let Token::Word(name) = &tokens[index + 1].0 {
                         let kind = match keyword.as_str() {
                             "fun" => ExportKind::Function,
                             "enum" => ExportKind::Enum,
                             "class" => ExportKind::Class,
-                            _ => ExportKind::TypeAlias,
+                            "define" => ExportKind::TypeAlias,
+                            _ => ExportKind::Trait,
                         };
                         let canonical = if module.is_empty() {
                             name.clone()
@@ -2007,7 +2209,7 @@ pub fn parse_modules(files: &[(String, String)]) -> Result<Program, String> {
             {
                 let declaration = depth == 0
                     && index > 0
-                    && matches!(&tokens[index - 1].0, Token::Word(word) if matches!(word.as_str(), "fun" | "enum" | "class" | "define"));
+                    && matches!(&tokens[index - 1].0, Token::Word(word) if matches!(word.as_str(), "fun" | "enum" | "class" | "define" | "trait"));
                 let next = tokens.get(index + 1).map(|value| &value.0);
                 let previous = index
                     .checked_sub(1)
@@ -2032,6 +2234,18 @@ pub fn parse_modules(files: &[(String, String)]) -> Result<Program, String> {
                         ) || (matches!(previous, Some(Token::Symbol('(')))
                             && index >= 2
                             && tokens[index - 2].0 == Token::Word("as".into()))
+                    }
+                    ExportKind::Trait => {
+                        matches!(previous, Some(Token::Word(word)) if word == "implements")
+                            || matches!(previous, Some(Token::Symbol(':')))
+                            || (matches!(previous, Some(Token::Symbol(',')))
+                                && tokens[..index]
+                                    .iter()
+                                    .rev()
+                                    .take_while(|(token, _)| {
+                                        !matches!(token, Token::Symbol('{') | Token::Symbol(';'))
+                                    })
+                                    .any(|(token, _)| token == &Token::Word("implements".into())))
                     }
                 };
                 if declaration || reference {
@@ -2068,6 +2282,7 @@ fn parse_tokens(tokens: Vec<(Token, Position)>) -> Result<Program, String> {
         declarations: Vec::new(),
         enums: HashMap::new(),
         classes: HashMap::new(),
+        traits: HashMap::new(),
         type_aliases: HashMap::new(),
         loop_depth: 0,
         lifecycle_hook: None,
@@ -2078,6 +2293,13 @@ fn parse_tokens(tokens: Vec<(Token, Position)>) -> Result<Program, String> {
     while parser.peek() != &Token::End {
         parser.reject_import()?;
         let position = parser.position();
+        if parser.peek() == &Token::Word("trait".into()) {
+            let name = parser.trait_declaration()?;
+            if signatures.contains_key(&name) {
+                return Err(position.error(format!("'{name}' is already declared as a function")));
+            }
+            continue;
+        }
         if parser.peek() == &Token::Word("pub".into()) {
             parser.next();
             if parser.peek() != &Token::Word("enum".into()) {
@@ -2132,6 +2354,12 @@ fn parse_tokens(tokens: Vec<(Token, Position)>) -> Result<Program, String> {
             continue;
         }
         let function = parser.function()?;
+        if parser.traits.contains_key(&function.name) {
+            return Err(position.error(format!(
+                "'{}' is already declared as a trait",
+                function.name
+            )));
+        }
         if parser.type_aliases.contains_key(&function.name) {
             return Err(position.error(format!(
                 "'{}' is already declared as a type alias",

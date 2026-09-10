@@ -278,6 +278,42 @@ fun twice<T:numeric>(value:T) result:T {
 Each used combination of concrete types creates a specialized function or class during
 compilation. Generic declarations therefore add no dynamic type dispatch to generated code.
 
+### Traits
+
+A trait declares public methods that implementing classes must provide:
+
+```text
+trait Printable {
+    fun render(prefix:string) result:string;
+}
+
+class Document(pub text:string) implements Printable {
+    fun __new__() {}
+
+    pub fun render(prefix:string) result:string {
+        result = self.text;
+    }
+}
+```
+
+Trait requirements contain signatures followed by semicolons and do not contain method bodies.
+The compiler checks that every required method exists, is public, and has identical parameter and
+result types. A class can implement multiple traits by separating their names with commas.
+
+Trait names can be used as generic constraints:
+
+```text
+fun keep<T:Printable>(value:T) result:T {
+    result = value;
+}
+
+var document = Document(text="hello");
+var kept = keep<Document>(document);
+```
+
+Supplying a class that does not declare `implements Printable` is a compile error. Traits are
+compile-time requirements and add no runtime dispatch or object metadata.
+
 ### Classes
 
 Classes declare typed fields in parentheses and methods in their body. Every
