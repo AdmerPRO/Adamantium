@@ -577,7 +577,7 @@ fn cli_entry(function: &Function) -> String {
             ));
         }
     }
-    text.push_str("    call ad_fun_main\n");
+    text.push_str(&format!("    call ad_fun_{}\n", function.name));
     if count != 0 {
         text.push_str(&format!("    add rsp, {}\n", count * 16));
     }
@@ -585,7 +585,7 @@ fn cli_entry(function: &Function) -> String {
     text
 }
 
-pub fn assembly(program: &Program) -> String {
+pub fn assembly_entry(program: &Program, entry: &str) -> String {
     let mut generator = Generator {
         text: include_str!("runtime.asm").into(),
         data: Vec::new(),
@@ -599,8 +599,8 @@ pub fn assembly(program: &Program) -> String {
     let main = program
         .functions
         .iter()
-        .find(|function| function.name == "main")
-        .expect("checked programs always contain main");
+        .find(|function| function.name == entry)
+        .expect("checked entry function must exist");
     generator.emit(cli_entry(main));
     for function in &program.functions {
         generator.function(function);

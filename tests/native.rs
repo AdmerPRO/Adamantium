@@ -11,6 +11,36 @@ static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_test_runner_reports_passes_failures_and_filters() {
+    let project = Project::new("fun main() {}");
+    fs::write(
+        project.0.join("code/tests.ad"),
+        "#[test]\nfun passing() { print.newline(\"pass output\"); }\n#[test]\nfun failing() { panic(\"expected failure\"); }\n",
+    )
+    .unwrap();
+    let all = Command::new(env!("CARGO_BIN_EXE_adamantium"))
+        .args(["test", "run"])
+        .arg(&project.0)
+        .output()
+        .unwrap();
+    assert_eq!(all.status.code(), Some(1));
+    let stdout = String::from_utf8_lossy(&all.stdout);
+    assert!(stdout.contains("test passing ... ok"));
+    assert!(stdout.contains("test failing ... FAILED"));
+    assert!(stdout.contains("1 passed; 1 failed"));
+
+    let filtered = Command::new(env!("CARGO_BIN_EXE_adamantium"))
+        .args(["test", "run"])
+        .arg(&project.0)
+        .args(["passing", "--verbose"])
+        .output()
+        .unwrap();
+    assert!(filtered.status.success());
+    assert!(String::from_utf8_lossy(&filtered.stdout).contains("pass output"));
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_exit_is_successful_and_silent() {
     let project = Project::new("fun main() { exit(); panic(\"must not run\"); }");
     let build = Command::new(env!("CARGO_BIN_EXE_adamantium"))

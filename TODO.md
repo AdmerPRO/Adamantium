@@ -922,16 +922,16 @@ fun test_add() {
 }
 ```
 
-* [ ] Implement `tests.ad`
-* [ ] Implement `#[test]`
-* [ ] Discover test functions
-* [ ] Implement test runner
-* [ ] Implement test result reporting
-* [ ] Implement passed tests
-* [ ] Implement failed tests
-* [ ] Implement test errors
-* [ ] Implement test filtering
-* [ ] Implement isolated test execution where required
+* [x] Implement `tests.ad`
+* [x] Implement `#[test]`
+* [x] Discover test functions
+* [x] Implement test runner
+* [x] Implement test result reporting
+* [x] Implement passed tests
+* [x] Implement failed tests
+* [x] Implement test errors
+* [x] Implement test filtering
+* [x] Implement isolated test execution where required
 
 ---
 
@@ -945,14 +945,14 @@ adamantium test list
 adamantium test run <test_name>
 ```
 
-* [ ] Implement `adamantium test`
-* [ ] Implement `adamantium test run`
-* [ ] Implement `adamantium test list`
-* [ ] Implement running a single test
-* [ ] Implement test summaries
-* [ ] Implement exit codes for CI
-* [ ] Implement readable test output
-* [ ] Implement verbose test output
+* [x] Implement `adamantium test`
+* [x] Implement `adamantium test run`
+* [x] Implement `adamantium test list`
+* [x] Implement running a single test
+* [x] Implement test summaries
+* [x] Implement exit codes for CI
+* [x] Implement readable test output
+* [x] Implement verbose test output
 
 ---
 
@@ -1042,9 +1042,9 @@ adamantium new <project_name_or_path>
 * [x] Implement `run`
 * [x] Implement `build`
 * [x] Implement `new`
-* [ ] Implement `check`
+* [x] Implement `check`
 * [ ] Implement `install`
-* [ ] Implement `test`
+* [x] Implement `test`
 * [ ] Implement `clean`
 * [ ] Implement `clear`
 * [ ] Make `clean` and `clear` aliases
@@ -1057,20 +1057,20 @@ adamantium new <project_name_or_path>
 
 Static analysis should detect:
 
-* [ ] Type errors
-* [ ] Unused variables
-* [ ] Unused functions
-* [ ] Unreachable code
-* [ ] Invalid imports
-* [ ] Private symbol access
-* [ ] Missing return values
-* [ ] Invalid assignments
-* [ ] Invalid conversions
-* [ ] Invalid aliases
-* [ ] Invalid offsets
-* [ ] Invalid decorators
-* [ ] Invalid class usage
-* [ ] Invalid enum usage
+* [x] Type errors
+* [x] Unused variables
+* [x] Unused functions
+* [x] Unreachable code
+* [x] Invalid imports
+* [x] Private symbol access
+* [x] Missing return values
+* [x] Invalid assignments
+* [x] Invalid conversions
+* [x] Invalid aliases
+* [x] Invalid offsets
+* [x] Invalid decorators
+* [x] Invalid class usage
+* [x] Invalid enum usage
 
 ---
 

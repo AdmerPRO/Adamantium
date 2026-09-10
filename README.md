@@ -22,6 +22,7 @@ Then change into an Adamantium project directory and build or run it:
 ```bat
 adamantium build
 adamantium run
+adamantium check
 adamantium new MyProject
 adamantium new "C:\path\to\MyProject"
 ```
@@ -31,6 +32,30 @@ Both commands accept an optional project directory, for example
 directory. `adamantium PROJECT_DIRECTORY` remains an alias for
 `adamantium build PROJECT_DIRECTORY`. Run `adamantium --help` or
 `adamantium --version` for CLI information.
+
+Use `adamantium check [PROJECT_DIRECTORY]` to validate project metadata, imports,
+syntax, symbol access, aliases, classes, enums and types without invoking NASM or
+the linker. It reports unused variables/functions and unreachable code as warnings,
+creates no build artifacts, and returns a nonzero status when analysis fails.
+
+### Tests
+
+Put tests in `code/tests.ad` and annotate parameterless functions with `#[test]`:
+
+```adamantium
+#[test]
+fun addition() {
+    if 2 + 2 != 4 then {
+        panic("addition failed");
+    }
+}
+```
+
+Use `adamantium test list [PROJECT_DIRECTORY]` to discover tests and
+`adamantium test run [PROJECT_DIRECTORY] [TEST_NAME]` to run all tests or one
+exactly named test. Add `--verbose` to show output from passing tests. Every test
+runs in its own executable process. The summary reports passed and failed tests,
+and the command exits with code `1` when any test fails, which is suitable for CI.
 
 ### Program arguments
 
