@@ -698,6 +698,7 @@ impl Parser {
                     "use",
                     "pack",
                     "pub",
+                    "priv",
                     "if",
                     "then",
                     "else",
@@ -1823,6 +1824,9 @@ impl Parser {
         if !self.take(Token::Symbol(')')) {
             loop {
                 let public = self.take(Token::Word("pub".into()));
+                if !public {
+                    self.take(Token::Word("priv".into()));
+                }
                 let field_position = self.position();
                 let optional = self.take(Token::Symbol('&'));
                 let field = self.name()?;
@@ -1889,6 +1893,9 @@ impl Parser {
         let mut has_constructor = false;
         while self.peek() != &Token::Symbol('}') {
             let public = self.take(Token::Word("pub".into()));
+            if !public {
+                self.take(Token::Word("priv".into()));
+            }
             if self.peek() != &Token::Word("fun".into()) {
                 return Err(self.position().error("expected a class method"));
             }
@@ -2022,6 +2029,17 @@ enum ExportKind {
     TypeAlias,
     Trait,
 }
+impl ExportKind {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Function => "function",
+            Self::Enum => "enum",
+            Self::Class => "class",
+            Self::TypeAlias => "type alias",
+            Self::Trait => "trait",
+        }
+    }
+}
 
 fn module_prefix(module: &str) -> String {
     format!("admod__{}__", module.replace('/', "__"))
@@ -2057,7 +2075,7 @@ pub fn parse_modules(files: &[(String, String)]) -> Result<Program, String> {
                         } else {
                             format!("{}{name}", module_prefix(module))
                         };
-                        let public = kind != ExportKind::Enum
+                        let public = matches!(kind, ExportKind::TypeAlias | ExportKind::Trait)
                             || (index > 0 && tokens[index - 1].0 == Token::Word("pub".into()));
                         if exports
                             .insert((module.clone(), name.clone()), (canonical, kind, public))
@@ -2131,8 +2149,10 @@ pub fn parse_modules(files: &[(String, String)]) -> Result<Program, String> {
                                 position.error(format!("module '{path}' does not export '{name}'"))
                             })?;
                         if !exported.2 {
-                            return Err(position
-                                .error(format!("enum '{name}' is private in module '{path}'")));
+                            return Err(position.error(format!(
+                                "{} '{name}' is private in module '{path}'",
+                                exported.1.name()
+                            )));
                         }
                         if local.contains_key(name)
                             || imports.insert(name.clone(), exported).is_some()
@@ -2174,10 +2194,10 @@ pub fn parse_modules(files: &[(String, String)]) -> Result<Program, String> {
                 break;
             }
             if depth == 0
-                && tokens[index].0 == Token::Word("pub".into())
+                && matches!(&tokens[index].0, Token::Word(word) if word == "pub" || word == "priv")
                 && tokens
                     .get(index + 1)
-                    .is_some_and(|token| token.0 == Token::Word("enum".into()))
+                    .is_some_and(|token| matches!(&token.0, Token::Word(word) if matches!(word.as_str(), "fun" | "class" | "enum")))
             {
                 index += 1;
                 continue;
@@ -2200,8 +2220,12 @@ pub fn parse_modules(files: &[(String, String)]) -> Result<Program, String> {
                         exports.get(&(path_parts.join("/"), name.clone()))
                 {
                     if !public && path_parts.join("/") != module.as_str() {
+                        let kind = exports
+                            .get(&(path_parts.join("/"), name.clone()))
+                            .map(|export| export.1.name())
+                            .unwrap_or("symbol");
                         return Err(position.error(format!(
-                            "enum '{name}' is private in module '{}'",
+                            "{kind} '{name}' is private in module '{}'",
                             path_parts.join("/")
                         )));
                     }
@@ -2307,10 +2331,13 @@ fn parse_tokens(tokens: Vec<(Token, Position)>) -> Result<Program, String> {
             }
             continue;
         }
-        if parser.peek() == &Token::Word("pub".into()) {
+        if matches!(parser.peek(), Token::Word(word) if word == "pub" || word == "priv") {
             parser.next();
-            if parser.peek() != &Token::Word("enum".into()) {
-                return Err(position.error("pub is currently supported only for enums"));
+            if !matches!(parser.peek(), Token::Word(word) if matches!(word.as_str(), "fun" | "class" | "enum"))
+            {
+                return Err(
+                    position.error("pub and priv can annotate only functions, classes and enums")
+                );
             }
         }
         if parser.peek() == &Token::Word("define".into()) {

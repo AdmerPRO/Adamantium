@@ -25,7 +25,7 @@ fn main() -> ExitCode {
     }
 }
 
-const HELP: &str = "Adamantium compiler (Windows x64)\n\
+const HELP: &str = "Adamantium compiler (Windows/Linux x86-64)\n\
 Usage:\n\
   adamantium check [PROJECT_DIRECTORY]\n\
   adamantium install [PROJECT_DIRECTORY]\n\
@@ -40,7 +40,7 @@ Usage:\n\
   adamantium --version\n\n\
 PROJECT_DIRECTORY defaults to the current directory.\n\
 For compatibility, `adamantium PROJECT_DIRECTORY` is the same as `adamantium build PROJECT_DIRECTORY`.\n\
-Building requires NASM and Visual Studio C++ build tools.\n\
+Building requires NASM and a platform linker (MSVC on Windows or cc on Linux).\n\
 Override tools with ADAMANTIUM_NASM and ADAMANTIUM_LINKER.";
 
 enum Action {
@@ -506,13 +506,21 @@ fn emit_executable(
     let target = root.join("target");
     fs::create_dir_all(&target).map_err(|e| e.to_string())?;
     let asm = target.join(format!("{output_name}.asm"));
-    let obj = target.join(format!("{output_name}.obj"));
-    let exe = target.join(format!("{output_name}.exe"));
+    let obj = target.join(if cfg!(target_os = "linux") {
+        format!("{output_name}.o")
+    } else {
+        format!("{output_name}.obj")
+    });
+    let exe = target.join(if cfg!(target_os = "linux") {
+        output_name.to_string()
+    } else {
+        format!("{output_name}.exe")
+    });
     let runtime = target.join("adamantium_runtime.lib");
     let runtime_bytes = include_bytes!(concat!(env!("OUT_DIR"), "/runtime.lib"));
     if runtime_bytes.is_empty() {
         return Err(
-            "building Adamantium executables requires the Windows x64 MSVC compiler build".into(),
+            "building Adamantium executables is supported on Windows and Linux x86-64".into(),
         );
     }
     fs::write(&runtime, runtime_bytes).map_err(|e| e.to_string())?;
@@ -541,7 +549,11 @@ fn emit_executable(
     execute(
         Command::new(nasm)
             .arg("-f")
-            .arg("win64")
+            .arg(if cfg!(target_os = "linux") {
+                "elf64"
+            } else {
+                "win64"
+            })
             .arg(&asm)
             .arg("-o")
             .arg(&obj),
@@ -823,6 +835,17 @@ fn load_modules(code: &Path) -> Result<Vec<(String, String)>, String> {
 }
 
 fn link(target: &Path, name: &str, obj: &Path, runtime: &Path, exe: &Path) -> Result<(), String> {
+    if cfg!(target_os = "linux") {
+        let libraries = include_str!(concat!(env!("OUT_DIR"), "/runtime-libraries.txt"));
+        let mut command =
+            Command::new(env::var_os("ADAMANTIUM_LINKER").unwrap_or_else(|| "cc".into()));
+        command.arg("-no-pie").arg(obj).arg(runtime);
+        command
+            .args(libraries.split_whitespace())
+            .arg("-o")
+            .arg(exe);
+        return execute(&mut command, "Linux C linker");
+    }
     let mut arguments = vec![
         OsString::from("/nologo"),
         OsString::from("/machine:x64"),

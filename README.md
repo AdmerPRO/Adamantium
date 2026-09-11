@@ -1,13 +1,14 @@
 # Adamantium Compiler
 
-A Rust compiler that translates Adamantium source code into NASM assembly
-and builds a native Windows x64 console executable.
+A Rust compiler that translates Adamantium source code into NASM assembly and
+builds native Windows or Linux x86-64 console executables.
 
 ## Requirements
 
 - Rust and Cargo with edition 2024 support
 - NASM on PATH or installed in `%ProgramFiles%\NASM`
-- Visual Studio C++ build tools and the Windows SDK
+- Windows: Visual Studio C++ build tools and the Windows SDK
+- Linux: a C linker available as `cc`
 
 ## Portable Windows package
 
@@ -109,11 +110,12 @@ floating-point values, strings and booleans (`true` or `false`). Omitted optiona
 passed to `main` as `None`.
 
 The compiler reads `code/main.ad`, `project.toml` and `requirement.toml`
-from the project directory. It writes `<name>.asm`, `<name>.obj` and
-`<name>.exe` into that project's `target` directory, where `name` comes
+from the project directory. It writes assembly, an object file and the native
+executable into that project's `target` directory, where `name` comes
 from `project.toml`. On Windows, the compiler finds Visual Studio with
 `vswhere` and configures the x64 linker automatically, so these commands work
-from regular PowerShell and Command Prompt sessions.
+from regular PowerShell and Command Prompt sessions. On Linux it generates an
+ELF64 object with NASM and links it through `cc`.
 
 ### WASM packages
 
@@ -326,6 +328,24 @@ pub enum State { ready, stopped }
 
 Other modules may then import it with `use` or access it as `module:State.variant`. Private enum
 access from another module is a compile error. Enum variants can be used as `match` patterns.
+
+Top-level functions and classes follow the same visibility rules. They are private
+to their module by default; `priv` makes that choice explicit and `pub` exports
+them for qualified access or `use` imports:
+
+```adamantium
+pub fun calculate(value:int) result:int {
+    result = value * 2;
+}
+
+priv fun helper() result:None {}
+
+pub class Counter(pub value:int) {
+    fun __new__() {}
+}
+```
+
+`main` remains the private executable entry point and never requires `pub`.
 
 ### Generics
 
@@ -763,21 +783,26 @@ and runtime failures:
 cargo test --locked --test native -- --ignored
 ```
 
+On Linux x86-64 with NASM and `cc`, run the Linux backend regression test:
+
+```sh
+cargo test --locked --test native_linux -- --ignored
+```
+
 The release compiler is generated at `target\release\adamantium.exe`.
 `src/main.rs` handles configuration and external tools; `src/syntax.rs`
 handles parsing and name checks. `src/typed.rs` checks types and conversions.
-`src/codegen.rs` generates NASM assembly; `src/runtime.asm` provides the entry
-point. `runtime/` contains shared type semantics, software floating point, and
+`src/codegen.rs` generates NASM assembly. `src/runtime.asm` and
+`src/runtime-linux.asm` provide platform entry points. `runtime/` contains
+shared type semantics, software floating point, and
 output helpers. Type tests run on every CI platform; native regression tests
 live in `tests/native.rs`.
 
-On Windows x64, `build.rs` builds and embeds a Rust static runtime library into
-the compiler. Compiling a project writes this library into its `target` directory
-and links it alongside the NASM object and the system libraries reported by Rust.
-Generated programs now use the Microsoft C runtime startup and Rust runtime
-helpers. The compiler's MSVC build and the Visual Studio/Windows SDK libraries
-are required to produce an EXE; Linux/macOS builds still support compiler checks
-and tests, but do not include a Windows runtime archive.
+On Windows and Linux x86-64, `build.rs` builds and embeds a Rust static runtime
+library into the compiler. Compiling a project writes this library into its
+`target` directory and links it alongside the NASM object and system libraries.
+Windows uses the MSVC linker and Windows SDK. Linux generates ELF64 and uses
+`cc`. macOS currently supports compiler checks but has no native program backend.
 
 ## Continuous integration
 
@@ -788,7 +813,10 @@ checks the compiler's `--help` command. The final step is `cargo build --locked
 --release`.
 
 Clippy provides Rust linting; Flake8 is intended for Python and is not used here.
-These checks build and test the compiler on all three systems. Generating and
-running Adamantium programs still requires the Windows x64 toolchain described
-above. Windows CI additionally installs NASM, configures MSVC, and runs the native
-EXE regression tests before the final release build.
+These checks build and test the compiler on all three systems. Windows CI
+installs NASM, configures MSVC, and runs the native EXE regressions. Linux CI
+installs NASM and runs a generated ELF64 executable. macOS runs compiler-only
+checks until its native backend is implemented.
+
+See [`docs/TARGETS.md`](docs/TARGETS.md) for supported targets and the future
+ARM64 contract.

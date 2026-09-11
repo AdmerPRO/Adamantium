@@ -586,8 +586,14 @@ fn cli_entry(function: &Function) -> String {
 }
 
 pub fn assembly_entry(program: &Program, entry: &str) -> String {
+    let runtime = if cfg!(target_os = "linux") {
+        include_str!("runtime-linux.asm")
+    } else {
+        include_str!("runtime.asm")
+    };
+    let runtime_length = runtime.len();
     let mut generator = Generator {
-        text: include_str!("runtime.asm").into(),
+        text: runtime.into(),
         data: Vec::new(),
         next_slot: 0,
         max_slot: 0,
@@ -646,6 +652,26 @@ pub fn assembly_entry(program: &Program, entry: &str) -> String {
             "ad_argument_name_{index}:\n    db {}\n",
             bytes.join(", ")
         ));
+    }
+    if cfg!(target_os = "linux") {
+        let mut generated = generator.text.split_off(runtime_length);
+        for (windows_name, linux_name) in [
+            ("ExitProcess", "ad_linux_exit"),
+            ("ad_evaluate", "ad_linux_evaluate"),
+            ("ad_print", "ad_linux_print"),
+            ("ad_message", "ad_linux_message"),
+            ("ad_object_new", "ad_linux_object_new"),
+            ("ad_object_clone", "ad_linux_object_clone"),
+            ("ad_list_error", "ad_linux_list_error"),
+            ("ad_optional_error", "ad_linux_optional_error"),
+            ("ad_parse_arguments", "ad_linux_parse_arguments"),
+        ] {
+            generated = generated.replace(
+                &format!("call {windows_name}"),
+                &format!("call {linux_name}"),
+            );
+        }
+        generator.text.push_str(&generated);
     }
     generator.text
 }

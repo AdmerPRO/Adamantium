@@ -71,6 +71,10 @@ jobs:
         if: runner.os == 'Windows'
         run: choco install nasm --yes --no-progress
 
+      - name: Install NASM on Linux
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --yes nasm
+
       - name: Configure Windows x64 linker
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
@@ -80,6 +84,10 @@ jobs:
       - name: Test generated Windows executables
         if: runner.os == 'Windows'
         run: cargo test --locked --test native -- --ignored
+
+      - name: Test generated Linux executables
+        if: runner.os == 'Linux'
+        run: cargo test --locked --test native_linux -- --ignored
 
       - name: Build release
         run: cargo build --locked --release

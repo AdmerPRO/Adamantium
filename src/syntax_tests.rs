@@ -135,7 +135,7 @@ fn expands_generic_functions_and_classes() {
 #[test]
 fn imports_generic_declarations_between_modules() {
     let files = vec![
-        ("utils".into(), "fun identity<T>(value:T) result:T { result=value; }".into()),
+        ("utils".into(), "pub fun identity<T>(value:T) result:T { result=value; }".into()),
         ("".into(), "pack utils; use utils:[identity]; fun main() { print.newline(identity<int>(7)); print.newline(utils:identity<string>(\"ok\")); }".into()),
     ];
     parse_modules(&files).unwrap();
@@ -627,8 +627,8 @@ fn shorthand_function_alias_detection_stays_inside_its_function() {
 #[test]
 fn combines_namespaced_modules_and_use_imports() {
     let files = vec![
-        ("utils".into(), "fun value(a:int) r:int { r=a+1; } fun other() r:int { r=2; } pub enum State { ready }".into()),
-        ("utils/tools".into(), "pack utils; use utils:[value]; fun calculate() r:int { r=value(4); }".into()),
+        ("utils".into(), "pub fun value(a:int) r:int { r=a+1; } priv fun other() r:int { r=2; } pub enum State { ready }".into()),
+        ("utils/tools".into(), "pack utils; use utils:[value]; pub fun calculate() r:int { r=value(4); }".into()),
         ("".into(), "pack utils; pack utils/tools; use utils:[value]; fun main() { print.newline(utils:value(1)); print.newline(value(2)); print.newline(utils/tools:calculate()); var state=utils:State.ready; }".into()),
     ];
     let program = parse_modules(&files).unwrap();
@@ -651,6 +651,51 @@ fn combines_namespaced_modules_and_use_imports() {
             .unwrap_err()
             .contains("does not export")
     );
+}
+
+#[test]
+fn enforces_function_and_class_visibility_between_modules() {
+    for declaration in [
+        "fun hidden() result:None {}",
+        "priv fun hidden() result:None {}",
+        "class Hidden() { fun __new__() {} }",
+        "priv class Hidden() { fun __new__() {} }",
+    ] {
+        let name = if declaration.contains("class") {
+            "Hidden"
+        } else {
+            "hidden"
+        };
+        let use_source = if declaration.contains("class") {
+            format!("pack utils; fun main() {{ var value=utils:{name}(); }}")
+        } else {
+            format!("pack utils; fun main() {{ utils:{name}(); }}")
+        };
+        let error = parse_modules(&[
+            ("utils".into(), declaration.into()),
+            ("".into(), use_source),
+        ])
+        .unwrap_err();
+        assert!(error.contains("is private"), "{error}");
+    }
+
+    parse_modules(&[
+        (
+            "utils".into(),
+            "pub fun visible() result:None {} pub class Visible() { fun __new__() {} }".into(),
+        ),
+        (
+            "".into(),
+            "pack utils; use utils:[visible,Visible]; fun main() { visible(); var value=Visible(); }"
+                .into(),
+        ),
+    ])
+    .unwrap();
+
+    assert!(parse(
+        "class C(priv value:int) { fun __new__() {} priv fun hidden() result:None {} } fun main() { var value=C(value=1); }"
+    )
+    .is_ok());
 }
 
 #[test]

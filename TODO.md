@@ -1,15 +1,15 @@
-# Adamantium — TODO
+# Adamantium - TODO
 
 ---
 
 ## 1. Project Foundation
 
-* [x] Create the `adamantium` CLI — `build` and `run` with an optional project directory
+* [x] Create the `adamantium` CLI - `build` and `run` with an optional project directory
 * [x] Add version information
 * [x] Add `--help`
 * [x] Add `--version`
 * [x] Add compiler error handling
-* [x] Add compiler warning system — nonfatal warnings with codes and source locations
+* [x] Add compiler warning system - nonfatal warnings with codes and source locations
 * [x] Create basic documentation structure
 
 ---
@@ -33,8 +33,8 @@ MyProject/
 * [x] Implement `requirement.toml`
 * [x] Implement `/code`
 * [x] Implement `/target`
-* [x] Validate project structure — required files and metadata; `target` is created when needed
-* [x] Detect invalid project structures — missing source/manifests and invalid TOML/metadata
+* [x] Validate project structure - required files and metadata; `target` is created when needed
+* [x] Detect invalid project structures - missing source/manifests and invalid TOML/metadata
 * [x] Add project name
 * [x] Add project version
 * [x] Add project description
@@ -76,14 +76,14 @@ Executable
 * [x] Implement parser
 * [x] Implement AST
 * [x] Implement name resolution
-* [x] Implement scope resolution — function-local variables; nested block scopes are pending
+* [x] Implement scope resolution - function-local variables; nested block scopes are pending
 * [x] Implement type checking
-* [x] Implement semantic analysis — names, arity, initialization, named returns, and mutability
-* [x] Implement unreachable-code detection — statements after unconditional `return`
-* [x] Implement unused-variable detection — reachable reads of locals and parameters
-* [x] Implement unused-function detection — call graph rooted at `main`, including disconnected cycles
-* [x] Implement invalid-access detection — current names, mutability, calls, methods and unsupported member/index/qualified access
-* [x] Implement invalid-import detection — missing modules/symbols, conflicts, paths and dependency cycles
+* [x] Implement semantic analysis - names, arity, initialization, named returns, and mutability
+* [x] Implement unreachable-code detection - statements after unconditional `return`
+* [x] Implement unused-variable detection - reachable reads of locals and parameters
+* [x] Implement unused-function detection - call graph rooted at `main`, including disconnected cycles
+* [x] Implement invalid-access detection - current names, mutability, calls, methods and unsupported member/index/qualified access
+* [x] Implement invalid-import detection - missing modules/symbols, conflicts, paths and dependency cycles
 * [x] Implement code generation
 * [x] Implement NASM backend
 * [x] Implement object file generation
@@ -95,16 +95,16 @@ Executable
 # 4. Basic Syntax
 
 * [x] Implement statements
-* [x] Implement expressions — typed numeric arithmetic and function calls
-* [x] Implement blocks — function and control-flow bodies
+* [x] Implement expressions - typed numeric arithmetic and function calls
+* [x] Implement blocks - function and control-flow bodies
 * [x] Implement semicolons
 * [x] Implement identifiers
-* [x] Implement literals — integers, floats, strings, booleans, and `None`
+* [x] Implement literals - integers, floats, strings, booleans, and `None`
 * [x] Implement function calls
-* [x] Implement operators — numeric `+`, `-`, `*`, `/`, `%`, comparisons, boolean operators and compound assignments
+* [x] Implement operators - numeric `+`, `-`, `*`, `/`, `%`, comparisons, boolean operators and compound assignments
 * [x] Implement operator precedence
 * [x] Implement parentheses
-* [x] Implement `{ }` blocks — function and control-flow bodies
+* [x] Implement `{ }` blocks - function and control-flow bodies
 
 ---
 
@@ -125,8 +125,8 @@ Multi-line comments:
 ```
 
 * [x] Implement `//`
-* [x] Implement `/* ... */` — non-nested block comments, including multiple lines
-* [x] Detect unterminated multi-line comments — report the opening line and column
+* [x] Implement `/* ... */` - non-nested block comments, including multiple lines
+* [x] Detect unterminated multi-line comments - report the opening line and column
 
 ---
 
@@ -144,7 +144,7 @@ var a = 10;
 * [x] Implement variable assignment
 * [x] Implement `=+`, `=-`, `=*`, and `=/` compound assignments
 * [x] Implement one-time `clamp(min,max)` on changeable numeric variables
-* [x] Implement variable scope — one local scope per function call
+* [x] Implement variable scope - one local scope per function call
 * [x] Implement variable shadowing rules
 * [x] Prevent use of removed variables
 * [x] Prevent invalid reassignment
@@ -215,10 +215,10 @@ Implement:
 * [x] `bool`
 * [x] `None`
 * [ ] `offset`
-* [x] `List` — homogeneous literals, explicit element types, indexing and element assignment
-* [x] `enum` — named variants with distinct inferred types
-* [x] `class` — required typed fields, methods, construction and value copying
-* [x] `fun` — callable function values through variable aliases
+* [x] `List` - homogeneous literals, explicit element types, indexing and element assignment
+* [x] `enum` - named variants with distinct inferred types
+* [x] `class` - required typed fields, methods, construction and value copying
+* [x] `fun` - callable function values through variable aliases
 
 ### Type aliases
 
@@ -248,8 +248,8 @@ var c = "Hello";  // string
 * [x] Implement default `f64`
 * [x] Implement string inference
 * [x] Implement boolean inference
-* [x] Implement inferred list types — inspect every element and promote compatible numeric types
-* [x] Detect ambiguous types — empty and incompatible lists require an explicit element type
+* [x] Implement inferred list types - inspect every element and promote compatible numeric types
+* [x] Detect ambiguous types - empty and incompatible lists require an explicit element type
 
 ---
 
@@ -262,7 +262,7 @@ var a = b.as(i32);
 ```
 
 * [x] Implement `as(Type)`
-* [x] Implement explicit numeric conversions — numeric type suffixes and `as(Type)`
+* [x] Implement explicit numeric conversions - numeric type suffixes and `as(Type)`
 * [x] Implement automatic numeric promotion
 * [x] Define safe conversion rules
 * [x] Define narrowing conversion rules
@@ -326,16 +326,16 @@ fun add(a:int, b:int) r:int {
 ```
 
 * [x] Implement functions
-* [x] Implement parameters — supported value types, passed by value
+* [x] Implement parameters - supported value types, passed by value
 * [x] Implement named return variables
-* [x] Implement return types — supported value types and `None`
+* [x] Implement return types - supported value types and `None`
 * [x] Implement implicit final return
-* [x] Implement `return` — `return <named-result>;` only
+* [x] Implement `return` - `return <named-result>;` only
 * [x] Implement early returns
 * [x] Implement `None` return type
 * [x] Implement function calls
 * [x] Implement recursion
-* [x] Implement function values — `var callable = function();` and explicit `as_variable`
+* [x] Implement function values - `var callable = function();` and explicit `as_variable`
 
 ---
 
@@ -351,7 +351,7 @@ fun main(...) {
 * [x] Detect `main`
 * [x] Validate `main`
 * [x] Generate executable entry point
-* [x] Implement command-line arguments — named `--name value` pairs
+* [x] Implement command-line arguments - named `--name value` pairs
 * [x] Map CLI arguments to `main` parameters
 * [x] Warn about missing required arguments
 * [x] Warn about unknown arguments
@@ -375,12 +375,12 @@ pub
 priv
 ```
 
-* [ ] Implement private functions by default
-* [ ] Implement `pub`
-* [ ] Implement `priv`
-* [ ] Implement public classes
+* [x] Implement private functions by default
+* [x] Implement `pub`
+* [x] Implement `priv`
+* [x] Implement public classes
 * [x] Implement public enums
-* [ ] Prevent access to private symbols from other modules
+* [x] Prevent access to private symbols from other modules
 * [x] Make `main` special and not require `pub`
 
 ---
@@ -426,7 +426,7 @@ use utils::[dodawanie, odejmowanie];
 * [x] Implement imports
 * [x] Implement multiple imports with `module:[a,b]`
 * [x] Implement qualified module access with `module:symbol`
-* [ ] Import only public symbols — top-level visibility is pending
+* [ ] Import only public symbols - top-level visibility is pending
 * [x] Detect duplicate and conflicting imports
 * [x] Detect missing symbols
 
@@ -446,12 +446,12 @@ class Player (
 ```
 
 * [x] Implement class declarations
-* [x] Implement fields — required named initialization; class-typed fields pending deep copy support
+* [x] Implement fields - required named initialization; class-typed fields pending deep copy support
 * [x] Implement field types
 * [x] Implement methods
 * [x] Implement `self`
 * [ ] Implement class visibility
-* [x] Implement object creation — named field arguments with value-copy semantics
+* [x] Implement object creation - named field arguments with value-copy semantics
 * [x] Implement object field access
 * [x] Implement object method calls
 * [x] Implement optional fields
@@ -495,8 +495,8 @@ enum Direction {
 
 * [x] Implement enum declarations
 * [x] Implement enum variants
-* [x] Implement enum values — assignment, function arguments/results and numeric-index printing
-* [x] Implement enum comparison — `==` and `!=`
+* [x] Implement enum values - assignment, function arguments/results and numeric-index printing
+* [x] Implement enum comparison - `==` and `!=`
 * [x] Implement enum matching
 * [x] Implement public enums
 * [x] Prevent access to private enums from other modules
@@ -573,7 +573,7 @@ until ready == true {
 }
 ```
 
-* [x] Implement `until` — repeat while the condition is false
+* [x] Implement `until` - repeat while the condition is false
 
 ## `loop`
 
@@ -646,7 +646,7 @@ exit(code = 45);
 ```
 
 * [x] Implement normal program termination
-* [x] Implement exit codes — automatic codes 0, 1, and 2; explicit exit API is pending
+* [x] Implement exit codes - automatic codes 0, 1, and 2; explicit exit API is pending
 * [x] Return exit code to operating system
 * [x] Ensure `exit()` produces no error output
 
@@ -663,8 +663,8 @@ print.sameline("Hello ");
 
 * [x] Implement `print.newline`
 * [x] Implement `print.sameline`
-* [x] Support strings — UTF-8 literals and string variables
-* [x] Support numbers — signed/unsigned integers and f32/f64/f128
+* [x] Support strings - UTF-8 literals and string variables
+* [x] Support numbers - signed/unsigned integers and f32/f64/f128
 * [x] Support booleans
 * [x] Support objects where appropriate â€” classes print their names and public fields
 * [x] Reject invalid `print(...)` syntax
@@ -820,7 +820,7 @@ var stc a = 10:i32;
 
 # 32. Operator Overloading
 
-* [x] Design operator overload syntax — public `__add__`, `__sub__`, `__mul__`, `__div__`, `__eq__`, `__ne__`, `__lt__`, `__le__`, `__gt__`, and `__ge__` methods
+* [x] Design operator overload syntax - public `__add__`, `__sub__`, `__mul__`, `__div__`, `__eq__`, `__ne__`, `__lt__`, `__le__`, `__gt__`, and `__ge__` methods
 * [x] Implement `+`
 * [x] Implement `-`
 * [x] Implement `*`
@@ -828,7 +828,7 @@ var stc a = 10:i32;
 * [x] Implement comparison operators
 * [x] Implement equality operators
 * [x] Validate operator implementations
-* [x] Prevent unsafe operator behavior — public methods, one required same-class operand, checked result types
+* [x] Prevent unsafe operator behavior - public methods, one required same-class operand, checked result types
 
 ---
 
@@ -857,7 +857,7 @@ adamantium-async = "1.0"
 
 ---
 
-# 34. File System — `AdamantiumFiles`
+# 34. File System - `AdamantiumFiles`
 
 Official file-system library.
 
@@ -880,7 +880,7 @@ Official file-system library.
 
 ---
 
-# 35. JSON — `AdamantiumJson`
+# 35. JSON - `AdamantiumJson`
 
 Official JSON library.
 
@@ -1010,9 +1010,9 @@ assert(value, "message");
 
 * [ ] Design package format
 * [x] Implement `requirement.toml` package declarations
-* [x] Implement dependency resolution — AdmerPRO GitHub release URL and version tag mapping
-* [x] Implement dependency installation — download `adamantium_packet.wasm`
-* [x] Implement dependency versions — `MAJOR.MINOR.PATCH` maps to `adamantium_packet_MAJOR_MINOR_PATCH`
+* [x] Implement dependency resolution - AdmerPRO GitHub release URL and version tag mapping
+* [x] Implement dependency installation - download `adamantium_packet.wasm`
+* [x] Implement dependency versions - `MAJOR.MINOR.PATCH` maps to `adamantium_packet_MAJOR_MINOR_PATCH`
 * [ ] Implement dependency locking
 * [ ] Implement package cache
 * [ ] Implement package publishing
@@ -1048,8 +1048,8 @@ adamantium new <project_name_or_path>
 * [x] Implement `clean`
 * [x] Implement `clear`
 * [x] Make `clean` and `clear` aliases
-* [x] Add command error handling — unknown options and excess arguments are rejected
-* [x] Add command help — top-level help documents the available commands
+* [x] Add command error handling - unknown options and excess arguments are rejected
+* [x] Add command help - top-level help documents the available commands
 
 ---
 
@@ -1099,14 +1099,14 @@ Adamantium must remain memory-safe.
 * [ ] Design Adamantium runtime
 * [x] Implement runtime startup
 * [x] Implement runtime shutdown
-* [x] Implement printing — strings, integers, floats, booleans, and `None`
+* [x] Implement printing - strings, integers, floats, booleans, and `None`
 * [x] Implement panic handling
 * [x] Implement warning handling
-* [x] Implement exit codes — normal completion, output failures, arithmetic/range failures
+* [x] Implement exit codes - normal completion, output failures, arithmetic/range failures
 * [ ] Implement memory management
-* [x] Implement string runtime — immutable literal storage and value copies; string operations are pending
+* [x] Implement string runtime - immutable literal storage and value copies; string operations are pending
 * [ ] Implement list runtime
-* [x] Implement object runtime — allocation and independent class-value copying
+* [x] Implement object runtime - allocation and independent class-value copying
 * [x] Report arithmetic overflow, division by zero, and invalid clamp ranges
 * [ ] Implement error runtime
 * [ ] Optimize runtime overhead
@@ -1117,16 +1117,16 @@ Adamantium must remain memory-safe.
 
 * [x] Generate valid NASM syntax
 * [x] Generate functions
-* [x] Generate variables — typed local values in stack slots
+* [x] Generate variables - typed local values in stack slots
 * [x] Generate arithmetic
 * [x] Generate comparisons
 * [x] Generate branches
 * [x] Generate loops
 * [x] Generate function calls
 * [x] Generate returns
-* [x] Generate classes — runtime-backed field storage, method calls and independent copies
+* [x] Generate classes - runtime-backed field storage, method calls and independent copies
 * [ ] Generate lists
-* [x] Generate strings — read-only UTF-8 storage with pointer/length values
+* [x] Generate strings - read-only UTF-8 storage with pointer/length values
 * [x] Generate scalar aliases and disconnection copies
 * [ ] Generate async support
 * [x] Generate runtime calls
@@ -1134,7 +1134,7 @@ Adamantium must remain memory-safe.
 * [x] Discover bundled `tools/nasm.exe` automatically
 * [ ] Remove the remaining Visual Studio linker and Windows SDK requirement
 * [ ] Add optimization passes
-* [x] Validate generated assembly — NASM assembly and native EXE regression tests
+* [x] Validate generated assembly - NASM assembly and native EXE regression tests
 
 ---
 
@@ -1181,9 +1181,9 @@ Create the official standard library.
 * [x] Language overview
 * [x] Installation guide
 * [x] Getting started guide
-* [x] Variables — currently supported declarations and mutability
-* [x] Types — supported scalar types, defaults, and suffix annotations
-* [x] Functions — typed parameters and named-result behavior
+* [x] Variables - currently supported declarations and mutability
+* [x] Types - supported scalar types, defaults, and suffix annotations
+* [x] Functions - typed parameters and named-result behavior
 * [x] Classes
 * [x] Enums
 * [ ] Modules
@@ -1239,17 +1239,17 @@ Create the official standard library.
 * [x] Create GitHub Actions workflow
 * [x] Build compiler on every push
 * [x] Run compiler tests
-* [x] Run Adamantium tests — native regression programs on Windows
+* [x] Run Adamantium tests - native regression programs on Windows
 * [x] Run formatting checks
 * [x] Run static analysis
 * [x] Check spelling with Typos on all three CI runners
 * [x] Build release binaries
-* [x] Test installed CLI on Windows x86-64 — help, version, build and run
-* [x] Test Windows — compiler checks and native EXE regression tests configured
-* [x] Test Linux — compiler build/tests configured; no Linux program backend
-* [x] Test macOS — compiler build/tests configured; no macOS program backend
+* [x] Test installed CLI on Windows x86-64 - help, version, build and run
+* [x] Test Windows - compiler checks and native EXE regression tests configured
+* [x] Test Linux - compiler tests and native generated executable test
+* [x] Test macOS - compiler build/tests configured; no macOS program backend
 * [ ] Build documentation
-* [x] Create portable Windows packaging workflow — manual runs and version tags
+* [x] Create portable Windows packaging workflow - manual runs and version tags
 * [x] Publish portable ZIP as a GitHub Actions artifact
 * [x] Build a standalone CLI that does not require Rust on user machines
 * [x] Bundle and checksum the official NASM Windows binary
@@ -1260,20 +1260,20 @@ Create the official standard library.
 
 # 52. Compiler Testing
 
-* [x] Lexer tests — covered through parser regression tests
+* [x] Lexer tests - covered through parser regression tests
 * [x] Parser tests
 * [x] AST tests
 * [x] Type checker tests
 * [x] Semantic analysis tests
-* [x] Module tests — namespaces, qualified calls, use imports and nested files
-* [x] Class tests — parsing, typing, visibility, construction, mutation and native copying
+* [x] Module tests - namespaces, qualified calls, use imports and nested files
+* [x] Class tests - parsing, typing, visibility, construction, mutation and native copying
 * [x] Enum tests
 * [x] Alias tests
 * [ ] Memory-safety tests
 * [x] Code generation tests
 * [x] NASM generation tests
 * [x] Runtime tests
-* [x] CLI tests — command parsing and installed Windows x86-64 CLI workflow
+* [x] CLI tests - command parsing and installed Windows x86-64 CLI workflow
 * [x] Integration tests
 * [x] Regression tests
 
@@ -1290,7 +1290,7 @@ Create clear compiler diagnostics.
 * [x] Error highlighting
 * [x] Suggestions
 * [x] "Did you mean?" suggestions
-* [x] Multi-error reporting — independent project and requirement manifest errors
+* [x] Multi-error reporting - independent project and requirement manifest errors
 * [x] Context-aware diagnostics
 * [x] Clear runtime panic messages
 
@@ -1298,11 +1298,11 @@ Create clear compiler diagnostics.
 
 # 54. Cross-Platform Support
 
-* [x] Windows support — native console executables
-* [ ] Linux support
+* [x] Windows support - native console executables
+* [x] Linux support - native x86-64 ELF executables
 * [ ] macOS support
-* [x] x86-64 backend — Windows only
-* [ ] Define future ARM64 support
+* [x] x86-64 backend - Windows COFF and Linux ELF64
+* [x] Define future ARM64 support - target triples, ABI, object formats and acceptance tests
 * [ ] Cross-platform standard library behavior
 * [ ] Cross-platform file handling
 * [ ] Cross-platform process handling
@@ -1394,7 +1394,7 @@ The recommended implementation order is:
 2. [x] Parser
 3. [x] AST
 4. [x] Variables
-5. [x] Types — current scalar, list, enum, class and function-value types
+5. [x] Types - current scalar, list, enum, class and function-value types
 6. [x] Type checker
 7. [x] Functions
 8. [x] `if`
@@ -1407,7 +1407,7 @@ The recommended implementation order is:
 15. [x] Classes
 16. [x] Enums
 17. [ ] Memory-safety model
-18. [x] Alias system — core value and symbol aliases
+18. [x] Alias system - core value and symbol aliases
 19. [x] NASM code generation
 20. [x] Linker integration
 21. [x] `adamantium build`
@@ -1424,5 +1424,5 @@ The recommended implementation order is:
 32. [ ] Optimization
 33. [ ] Documentation
 34. [ ] VS Code support
-35. [x] CI/CD — push and pull-request validation workflows
+35. [x] CI/CD - push and pull-request validation workflows
 36. [ ] Stable release
