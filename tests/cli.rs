@@ -125,6 +125,45 @@ fn no_arguments_shows_help() {
 }
 
 #[test]
+fn clean_and_clear_remove_only_project_targets() {
+    let base = std::env::temp_dir().join(format!(
+        "adamantium-cli-clean-{}-{}",
+        std::process::id(),
+        NEXT_PROJECT.fetch_add(1, Ordering::Relaxed)
+    ));
+    fs::create_dir_all(base.join("code")).unwrap();
+    fs::create_dir(base.join("target")).unwrap();
+    fs::write(
+        base.join("project.toml"),
+        "name=\"CleanProject\"\nversion=\"1.0.0\"\ndescription=\"\"\nauthors=[]\n",
+    )
+    .unwrap();
+    fs::write(base.join("requirement.toml"), "[packages]\n").unwrap();
+    fs::write(base.join("code/main.ad"), "fun main() {}").unwrap();
+    fs::write(base.join("target/artifact.obj"), "generated").unwrap();
+    fs::write(base.join("keep.txt"), "keep").unwrap();
+
+    for command in ["clean", "clear"] {
+        let output = adamantium()
+            .args([command, base.to_str().unwrap()])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(!base.join("target").exists());
+        assert_eq!(fs::read_to_string(base.join("keep.txt")).unwrap(), "keep");
+        if command == "clean" {
+            fs::create_dir(base.join("target")).unwrap();
+            fs::write(base.join("target/artifact.asm"), "generated").unwrap();
+        }
+    }
+    fs::remove_dir_all(base).unwrap();
+}
+
+#[test]
 fn invalid_cli_arguments_are_rejected() {
     for arguments in [vec!["--unknown"], vec!["build", "one", "two"], vec!["new"]] {
         let output = adamantium().args(arguments).output().unwrap();

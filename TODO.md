@@ -1045,9 +1045,9 @@ adamantium new <project_name_or_path>
 * [x] Implement `check`
 * [x] Implement `install`
 * [x] Implement `test`
-* [ ] Implement `clean`
-* [ ] Implement `clear`
-* [ ] Make `clean` and `clear` aliases
+* [x] Implement `clean`
+* [x] Implement `clear`
+* [x] Make `clean` and `clear` aliases
 * [x] Add command error handling — unknown options and excess arguments are rejected
 * [x] Add command help — top-level help documents the available commands
 
@@ -1227,7 +1227,7 @@ Create the official standard library.
 * [x] `adamantium build`
 * [x] `adamantium run`
 * [x] `adamantium install`
-* [ ] `adamantium clean`
+* [x] `adamantium clean`
 * [ ] `adamantium doctor`
 * [x] `adamantium new`
 * [ ] `adamantium init`

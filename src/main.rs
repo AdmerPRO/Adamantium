@@ -29,6 +29,8 @@ const HELP: &str = "Adamantium compiler (Windows x64)\n\
 Usage:\n\
   adamantium check [PROJECT_DIRECTORY]\n\
   adamantium install [PROJECT_DIRECTORY]\n\
+  adamantium clean [PROJECT_DIRECTORY]\n\
+  adamantium clear [PROJECT_DIRECTORY]\n\
   adamantium build [PROJECT_DIRECTORY]\n\
   adamantium run [PROJECT_DIRECTORY] [--name value ...]\n\
   adamantium test list [PROJECT_DIRECTORY]\n\
@@ -46,6 +48,7 @@ enum Action {
     Version,
     Check(PathBuf),
     Install(PathBuf),
+    Clean(PathBuf),
     TestList(PathBuf),
     TestRun(PathBuf, Option<String>, bool),
     Build(PathBuf),
@@ -72,6 +75,7 @@ fn cli(args: Vec<OsString>) -> Result<ExitCode, String> {
             println!("Checked {}", root.display());
         }
         Action::Install(root) => install_packages(&root)?,
+        Action::Clean(root) => clean_project(&root)?,
         Action::TestList(root) => list_tests(&root)?,
         Action::TestRun(root, filter, verbose) => {
             return run_tests(&root, filter.as_deref(), verbose);
@@ -136,6 +140,11 @@ fn action(args: Vec<OsString>) -> Result<Action, String> {
         no_more_args(args)?;
         return Ok(Action::Install(root.into()));
     }
+    if first == "clean" || first == "clear" {
+        let root = args.next().map_or_else(current_directory, Ok)?;
+        no_more_args(args)?;
+        return Ok(Action::Clean(root.into()));
+    }
     if first == "run" {
         let remaining = args.collect::<Vec<_>>();
         let (root, arguments) = if remaining
@@ -194,8 +203,12 @@ fn action(args: Vec<OsString>) -> Result<Action, String> {
     }
     let text = first.to_string_lossy();
     if !Path::new(&first).exists()
-        && let Some(command) =
-            closest_name(&text, &["build", "check", "install", "new", "run", "test"])
+        && let Some(command) = closest_name(
+            &text,
+            &[
+                "build", "check", "clean", "clear", "install", "new", "run", "test",
+            ],
+        )
     {
         return Err(format!(
             "unknown command '{text}'. Did you mean '{command}'? use --help."
@@ -540,6 +553,36 @@ fn emit_executable(
 
 fn check(root: &Path) -> Result<(), String> {
     analyze(root).map(|_| ())
+}
+
+fn clean_project(root: &Path) -> Result<(), String> {
+    let requested_root = root;
+    let root = requested_root
+        .canonicalize()
+        .map_err(|error| format!("{}: {error}", requested_root.display()))?;
+    read_toml(&root.join("project.toml"))?;
+    let target = root.join("target");
+    if !target.exists() {
+        println!("Project is already clean");
+        return Ok(());
+    }
+    let metadata = fs::symlink_metadata(&target)
+        .map_err(|error| format!("could not inspect {}: {error}", target.display()))?;
+    if metadata.file_type().is_symlink() {
+        return Err(format!(
+            "refusing to clean symbolic link {}",
+            target.display()
+        ));
+    }
+    if target.parent() != Some(root.as_path())
+        || target.file_name().is_none_or(|name| name != "target")
+    {
+        return Err("refusing to clean a target outside the project root".into());
+    }
+    fs::remove_dir_all(&target)
+        .map_err(|error| format!("could not clean {}: {error}", target.display()))?;
+    println!("Cleaned {}", target.display());
+    Ok(())
 }
 
 fn packages(table: &toml::Table) -> Result<Vec<Package>, String> {

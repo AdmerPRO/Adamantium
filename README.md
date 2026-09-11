@@ -45,6 +45,8 @@ Then change into an Adamantium project directory and build or run it:
 adamantium build
 adamantium run
 adamantium check
+adamantium clean
+adamantium clear
 adamantium new MyProject
 adamantium new "C:\path\to\MyProject"
 ```
@@ -54,6 +56,10 @@ Both commands accept an optional project directory, for example
 directory. `adamantium PROJECT_DIRECTORY` remains an alias for
 `adamantium build PROJECT_DIRECTORY`. Run `adamantium --help` or
 `adamantium --version` for CLI information.
+
+Use `adamantium clean [PROJECT_DIRECTORY]` to remove the project's generated
+`target` directory. `adamantium clear` is an exact alias. Both commands validate
+the project first and refuse to recursively follow a symbolic `target` path.
 
 Use `adamantium check [PROJECT_DIRECTORY]` to validate project metadata, imports,
 syntax, symbol access, aliases, classes, enums and types without invoking NASM or
