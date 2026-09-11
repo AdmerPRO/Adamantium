@@ -1,6 +1,107 @@
 use crate::syntax::{Call, Expr, Program, Statement};
 use std::collections::{HashMap, HashSet};
 
+const ERROR_SEPARATOR: &str = "\n\u{1e}\n";
+
+pub fn multiple_errors(errors: Vec<String>) -> String {
+    errors.join(ERROR_SEPARATOR)
+}
+
+pub fn render_errors(errors: &str) -> String {
+    errors
+        .split(ERROR_SEPARATOR)
+        .map(render_error)
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+fn render_error(error: &str) -> String {
+    let (code, context) = classify(error);
+    let mut rendered = format!("error[{code}]: {error}");
+    if let Some((path, line, column, message)) = source_location(error) {
+        rendered = format!("error[{code}]: {message}\n  --> {path}:{line}:{column}");
+        if let Ok(source) = std::fs::read_to_string(path)
+            && let Some(text) = source.lines().nth(line.saturating_sub(1))
+        {
+            rendered.push_str(&format!(
+                "\n   |\n{line:>3} | {text}\n   | {}^",
+                " ".repeat(column.saturating_sub(1))
+            ));
+        }
+    }
+    rendered.push_str(&format!("\n   = context: {context}"));
+    if let Some(help) = suggestion(error) {
+        rendered.push_str(&format!("\n   = help: {help}"));
+    }
+    rendered
+}
+
+fn classify(error: &str) -> (&'static str, &'static str) {
+    let lower = error.to_ascii_lowercase();
+    if lower.contains("project.toml") || lower.contains("requirement.toml") {
+        ("E400", "project configuration")
+    } else if lower.contains("nasm") || lower.contains("linker") || lower.contains("build tools") {
+        ("E500", "native toolchain")
+    } else if lower.contains("convert") || lower.contains("type") || lower.contains("arithmetic") {
+        ("E300", "type checking")
+    } else if lower.contains("import")
+        || lower.contains("module")
+        || lower.contains("declared")
+        || lower.contains("private")
+        || lower.contains("access")
+        || lower.contains("alias")
+    {
+        ("E200", "name and access resolution")
+    } else if lower.contains("expected")
+        || lower.contains("unterminated")
+        || lower.contains("unexpected")
+        || lower.contains("invalid character")
+    {
+        ("E100", "syntax analysis")
+    } else {
+        ("E000", "compiler operation")
+    }
+}
+
+fn suggestion(error: &str) -> Option<&'static str> {
+    let lower = error.to_ascii_lowercase();
+    if lower.contains("expected ';'") {
+        Some("add `;` at the end of the statement")
+    } else if lower.contains("must declare fun main") {
+        Some("add `fun main() { }` to code/main.ad")
+    } else if lower.contains("not initialized") {
+        Some("assign a value before reading this variable")
+    } else if lower.contains("private") {
+        Some("make the symbol public or access it from its defining module")
+    } else if lower.contains("convert") {
+        Some("use a compatible value or an explicit supported `.as(Type)` conversion")
+    } else if lower.contains("could not load module") {
+        Some("check the `pack` path and the corresponding `.ad` file")
+    } else {
+        None
+    }
+}
+
+fn source_location(error: &str) -> Option<(&str, usize, usize, &str)> {
+    for (first, _) in error.match_indices(':') {
+        let after_first = &error[first + 1..];
+        let second_relative = after_first.find(':')?;
+        let line = after_first[..second_relative].parse::<usize>().ok();
+        let after_second = &after_first[second_relative + 1..];
+        let third_relative = after_second.find(':')?;
+        let column = after_second[..third_relative].parse::<usize>().ok();
+        if let (Some(line), Some(column)) = (line, column) {
+            return Some((
+                &error[..first],
+                line,
+                column,
+                after_second[third_relative + 1..].trim(),
+            ));
+        }
+    }
+    None
+}
+
 pub fn warnings(program: &Program) -> Vec<String> {
     let mut warnings = Vec::new();
     let mut graph = HashMap::new();
@@ -276,6 +377,22 @@ fn visit_call(call: &Call, reads: &mut HashSet<usize>, calls: &mut HashSet<Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn renders_codes_context_highlights_and_suggestions() {
+        let path = std::env::temp_dir().join("adamantium-render-diagnostic.ad");
+        std::fs::write(&path, "fun main() {\nvar value=1\n}\n").unwrap();
+        let rendered = render_errors(&format!(
+            "{}:2:12: expected ';', found Symbol('}}')",
+            path.display()
+        ));
+        assert!(rendered.contains("error[E100]"));
+        assert!(rendered.contains("2 | var value=1"));
+        assert!(rendered.contains('^'));
+        assert!(rendered.contains("context: syntax analysis"));
+        assert!(rendered.contains("help: add `;`"));
+        std::fs::remove_file(path).unwrap();
+    }
     fn analyze(source: &str) -> Vec<String> {
         let program = crate::syntax::parse(source).unwrap();
         crate::typed::check(&program).unwrap();

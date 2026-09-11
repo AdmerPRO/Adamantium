@@ -71,8 +71,11 @@ fn check_analyzes_projects_without_build_tools_or_artifacts() {
         .unwrap();
     assert_eq!(invalid.status.code(), Some(1));
     let stderr = String::from_utf8_lossy(&invalid.stderr);
-    assert!(stderr.contains("error:"), "{stderr}");
+    assert!(stderr.contains("error[E300]"), "{stderr}");
     assert!(stderr.contains("main.ad"), "{stderr}");
+    assert!(stderr.contains("1 | fun main()"), "{stderr}");
+    assert!(stderr.contains("context: type checking"), "{stderr}");
+    assert!(stderr.contains("help:"), "{stderr}");
     fs::remove_dir_all(base).unwrap();
 }
 
@@ -128,6 +131,37 @@ fn invalid_cli_arguments_are_rejected() {
         assert_eq!(output.status.code(), Some(1));
         assert!(String::from_utf8_lossy(&output.stderr).contains("use --help"));
     }
+    let typo = adamantium().arg("buid").output().unwrap();
+    assert_eq!(typo.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&typo.stderr).contains("Did you mean 'build'?"));
+}
+
+#[test]
+fn reports_multiple_independent_manifest_errors() {
+    let base = std::env::temp_dir().join(format!(
+        "adamantium-cli-multiple-errors-{}-{}",
+        std::process::id(),
+        NEXT_PROJECT.fetch_add(1, Ordering::Relaxed)
+    ));
+    fs::create_dir_all(base.join("code")).unwrap();
+    fs::write(
+        base.join("project.toml"),
+        "name=1\nversion=2\nauthors=\"wrong\"\n",
+    )
+    .unwrap();
+    fs::write(base.join("requirement.toml"), "[packages]\nunknown=\"1\"\n").unwrap();
+    fs::write(base.join("code/main.ad"), "fun main() {}").unwrap();
+    let output = adamantium()
+        .args(["check", base.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(stderr.matches("error[E400]").count(), 5, "{stderr}");
+    assert!(stderr.contains("name must be a string"));
+    assert!(stderr.contains("description must be a string"));
+    assert!(stderr.contains("packages are not supported"));
+    fs::remove_dir_all(base).unwrap();
 }
 
 #[test]

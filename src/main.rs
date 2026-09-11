@@ -19,7 +19,7 @@ fn main() -> ExitCode {
     match cli(env::args_os().skip(1).collect()) {
         Ok(code) => code,
         Err(error) => {
-            eprintln!("error: {error}");
+            eprintln!("{}", diagnostics::render_errors(&error));
             ExitCode::FAILURE
         }
     }
@@ -163,9 +163,12 @@ fn action(args: Vec<OsString>) -> Result<Action, String> {
             };
             return Ok(Action::TestRun(root, filter, verbose));
         }
+        let command = command.to_string_lossy();
+        let help = closest_name(&command, &["list", "run"])
+            .map(|name| format!(" Did you mean '{name}'?"))
+            .unwrap_or_default();
         return Err(format!(
-            "unknown test command '{}'; use --help",
-            command.to_string_lossy()
+            "unknown test command '{command}'.{help} use --help."
         ));
     }
     if first.to_string_lossy().starts_with('-') {
@@ -174,8 +177,41 @@ fn action(args: Vec<OsString>) -> Result<Action, String> {
             first.to_string_lossy()
         ));
     }
+    let text = first.to_string_lossy();
+    if !Path::new(&first).exists()
+        && let Some(command) = closest_name(&text, &["build", "check", "new", "run", "test"])
+    {
+        return Err(format!(
+            "unknown command '{text}'. Did you mean '{command}'? use --help."
+        ));
+    }
     no_more_args(args)?;
     Ok(Action::Build(first.into()))
+}
+
+fn closest_name<'a>(input: &str, choices: &'a [&str]) -> Option<&'a str> {
+    choices
+        .iter()
+        .map(|choice| (*choice, edit_distance(input, choice)))
+        .filter(|(_, distance)| *distance <= 2)
+        .min_by_key(|(_, distance)| *distance)
+        .map(|(choice, _)| choice)
+}
+
+fn edit_distance(left: &str, right: &str) -> usize {
+    let mut row = (0..=right.chars().count()).collect::<Vec<_>>();
+    for (left_index, left_char) in left.chars().enumerate() {
+        let mut previous = row[0];
+        row[0] = left_index + 1;
+        for (right_index, right_char) in right.chars().enumerate() {
+            let replaced = previous + usize::from(left_char != right_char);
+            previous = row[right_index + 1];
+            row[right_index + 1] = (row[right_index + 1] + 1)
+                .min(row[right_index] + 1)
+                .min(replaced);
+        }
+    }
+    row[right.chars().count()]
 }
 
 fn args_contains_verbose(args: &[OsString]) -> bool {
@@ -502,15 +538,21 @@ fn project_sources(root: &Path) -> Result<ProjectSources, String> {
         .canonicalize()
         .map_err(|e| format!("{}: {e}", requested_root.display()))?;
     let project = read_toml(&root.join("project.toml"))?;
+    let mut errors = Vec::new();
     let name = project
         .get("name")
         .and_then(toml::Value::as_str)
-        .ok_or("project.toml: name must be a string")?
-        .to_string();
-    valid_project_name(&name).map_err(|error| format!("project.toml: {error}"))?;
+        .map(str::to_string);
+    if let Some(name) = &name {
+        if let Err(error) = valid_project_name(name) {
+            errors.push(format!("project.toml: {error}"));
+        }
+    } else {
+        errors.push("project.toml: name must be a string".into());
+    }
     for field in ["version", "description"] {
         if project.get(field).and_then(toml::Value::as_str).is_none() {
-            return Err(format!("project.toml: {field} must be a string"));
+            errors.push(format!("project.toml: {field} must be a string"));
         }
     }
     if !project
@@ -518,19 +560,22 @@ fn project_sources(root: &Path) -> Result<ProjectSources, String> {
         .and_then(toml::Value::as_array)
         .is_some_and(|a| a.iter().all(toml::Value::is_str))
     {
-        return Err("project.toml: authors must be an array of strings".into());
+        errors.push("project.toml: authors must be an array of strings".into());
     }
     let requirements = read_toml(&root.join("requirement.toml"))?;
     for (key, value) in &requirements {
         if key != "packages" || !value.as_table().is_some_and(|t| t.is_empty()) {
-            return Err(
+            errors.push(
                 "requirement.toml: packages are not supported yet; use an empty [packages] table"
                     .into(),
             );
         }
     }
+    if !errors.is_empty() {
+        return Err(diagnostics::multiple_errors(errors));
+    }
     let sources = load_modules(&root.join("code"))?;
-    Ok((root, name, sources))
+    Ok((root, name.expect("validated project name"), sources))
 }
 
 fn analyze_sources(root: &Path, sources: &[(String, String)]) -> Result<typed::Program, String> {

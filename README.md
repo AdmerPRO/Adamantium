@@ -685,6 +685,13 @@ The compiler's existing project metadata and package manifest format is unchange
 
 ### Compiler diagnostics
 
+Compiler errors use category codes such as `E100` for syntax, `E200` for
+name/access resolution, `E300` for types, `E400` for project configuration and
+`E500` for the native toolchain. Source errors include the affected line and a
+caret, followed by context and an actionable suggestion when one is available.
+CLI command typos provide a `Did you mean ...?` hint. Independent manifest
+problems are reported together instead of stopping after the first invalid field.
+
 Warnings include the source path, line, column, and a stable code. They are written
 to stderr and do not block a build:
 

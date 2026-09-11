@@ -1283,15 +1283,15 @@ Create the official standard library.
 
 Create clear compiler diagnostics.
 
-* [ ] Error codes
+* [x] Error codes
 * [x] Warning codes
 * [x] Source locations
 * [x] Line and column information
-* [ ] Error highlighting
-* [ ] Suggestions
-* [ ] "Did you mean?" suggestions
-* [ ] Multi-error reporting
-* [ ] Context-aware diagnostics
+* [x] Error highlighting
+* [x] Suggestions
+* [x] "Did you mean?" suggestions
+* [x] Multi-error reporting — independent project and requirement manifest errors
+* [x] Context-aware diagnostics
 * [x] Clear runtime panic messages
 
 ---
