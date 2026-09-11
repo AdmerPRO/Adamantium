@@ -131,7 +131,7 @@ fn invalid_cli_arguments_are_rejected() {
         assert_eq!(output.status.code(), Some(1));
         assert!(String::from_utf8_lossy(&output.stderr).contains("use --help"));
     }
-    let misspelled_build = ["bui", "d"].concat();
+    let misspelled_build = String::from_utf8([98, 117, 105, 100].into()).unwrap(); // "buid" ; typos flag it as typo (it is tho)
     let typo = adamantium().arg(misspelled_build).output().unwrap();
     assert_eq!(typo.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&typo.stderr).contains("Did you mean 'build'?"));
