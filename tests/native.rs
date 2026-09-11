@@ -438,8 +438,8 @@ fn native_multifile_pack_qualified_calls_and_use_imports() {
         project.0.join("code/utils.ad"),
         r#"
         pub enum Choice { first, second }
-        class Box(pub value:int) { fun __new__() {} }
-        fun add(a:int,b:int) result:int { result=a+b; }
+        pub class Box(pub value:int) { fun __new__() {} }
+        pub fun add(a:int,b:int) result:int { result=a+b; }
     "#,
     )
     .unwrap();
@@ -448,7 +448,7 @@ fn native_multifile_pack_qualified_calls_and_use_imports() {
         r#"
         pack utils;
         use utils:[add];
-        fun calculate(value:int) result:int { result=add(value,10); }
+        pub fun calculate(value:int) result:int { result=add(value,10); }
     "#,
     )
     .unwrap();
