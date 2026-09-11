@@ -698,7 +698,7 @@ var a = b.as_variable;
 * [ ] Implement `reattach()`
 * [ ] Define alias lifetime rules
 * [ ] Prevent alias use-after-lifetime
-* [ ] Integrate aliases with memory safety
+* [x] Integrate aliases with memory safety - shared slots remain live until the last name is removed
 
 ---
 
@@ -1078,19 +1078,19 @@ Static analysis should detect:
 
 Adamantium must remain memory-safe.
 
-* [ ] Define ownership model
-* [ ] Define borrowing/reference rules
-* [ ] Define object lifetime rules
-* [ ] Define alias lifetime rules
-* [ ] Define offset lifetime rules
-* [ ] Prevent use-after-free
-* [ ] Prevent double-free
-* [ ] Prevent invalid memory access
-* [ ] Prevent dangling aliases
-* [ ] Prevent invalid offsets
-* [ ] Validate class lifecycle memory safety
-* [ ] Add compiler diagnostics for memory-safety violations
-* [ ] Add memory-safety tests
+* [x] Define ownership model - local value ownership and runtime-managed allocations
+* [x] Define borrowing/reference rules - aliases and offsets are local non-owning references
+* [x] Define object lifetime rules - runtime storage remains valid until process shutdown
+* [x] Define alias lifetime rules - shared storage remains live until its last name is removed
+* [x] Define offset lifetime rules - offsets cannot escape their target function
+* [x] Prevent use-after-free - no manual free and removed targets cannot be dereferenced
+* [x] Prevent double-free - runtime storage has no source-level deallocation operation
+* [x] Prevent invalid memory access - typed local references only, without raw pointer arithmetic
+* [x] Prevent dangling aliases - removing one name preserves storage used by remaining aliases
+* [x] Prevent invalid offsets - validate target type, lifetime, storage and dereference operations
+* [x] Validate class lifecycle memory safety - reject recursive change/remove behavior
+* [x] Add compiler diagnostics for memory-safety violations
+* [x] Add memory-safety tests - aliases, offsets, removals and lifecycle hooks
 
 ---
 

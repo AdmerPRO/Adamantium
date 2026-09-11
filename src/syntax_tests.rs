@@ -613,6 +613,16 @@ fn parses_value_and_symbol_aliases() {
 }
 
 #[test]
+fn removing_aliased_values_finalizes_only_the_last_reference() {
+    let statements = main_statements(
+        "fun main() { var value=10; var alias=value.as_variable; value.remove; alias.remove; }",
+    );
+    assert!(matches!(statements[1], Statement::Noop(None)));
+    assert!(matches!(statements[2], Statement::Noop(None)));
+    assert!(matches!(statements[3], Statement::Remove(0)));
+}
+
+#[test]
 fn shorthand_function_alias_detection_stays_inside_its_function() {
     let error = parse(
         "fun main() { var value=result(); print.newline(value); } fun other() r:None { value(); } fun result() r:int { r=7; }",

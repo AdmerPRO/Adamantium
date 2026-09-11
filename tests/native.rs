@@ -130,6 +130,35 @@ fn native_class_lifecycle_hooks_run_in_order() {
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_aliased_class_is_finalized_after_its_last_name_is_removed() {
+    let output = Project::new(
+        r#"
+        class Resource(pub value:int) {
+            fun __new__() {}
+            fun __change__() { print.newline("changed"); }
+            fun __remove__() { print.newline("removed"); }
+        }
+        fun main() {
+            var resource=Resource(value=1);
+            var alias=resource.as_variable;
+            resource.remove;
+            alias.value=2;
+            alias.remove;
+        }
+    "#,
+    )
+    .run();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"changed\r\nremoved\r\n");
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_removed_names_can_be_redeclared() {
     let source = "fun main() { var a=10; var alias=a.as_variable; a.remove; alias=15; var a=20; print.newline(alias); print.newline(a); }";
     let output = Project::new(source).run();

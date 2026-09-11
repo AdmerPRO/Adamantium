@@ -1397,9 +1397,20 @@ impl Parser {
                                 position.error("__remove__ cannot remove an object recursively")
                             );
                         }
+                        let remaining_references = self
+                            .bindings
+                            .iter()
+                            .filter(|(other_name, binding)| {
+                                *other_name != &name && binding.slot == slot
+                            })
+                            .count();
                         self.bindings.remove(&name);
                         self.removed_variables.insert(name);
-                        Statement::Remove(slot)
+                        if remaining_references == 0 {
+                            Statement::Remove(slot)
+                        } else {
+                            Statement::Noop(None)
+                        }
                     } else if member == "disconect" || member == "disconnect" {
                         let binding = self.bindings.get(&name).unwrap();
                         if !binding.alias {

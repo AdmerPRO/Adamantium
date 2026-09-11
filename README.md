@@ -850,3 +850,6 @@ checks until its native backend is implemented.
 
 See [`docs/TARGETS.md`](docs/TARGETS.md) for supported targets and the future
 ARM64 contract.
+
+See [`docs/MEMORY_SAFETY.md`](docs/MEMORY_SAFETY.md) for ownership, alias,
+offset, object lifetime, and lifecycle-hook rules.
