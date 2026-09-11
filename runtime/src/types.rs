@@ -24,6 +24,7 @@ pub enum Type {
     Class(u32),
     Optional(u32),
     List(u32),
+    Offset(u32),
 }
 
 impl Type {
@@ -60,6 +61,7 @@ impl Type {
             2 => return Some(Self::Class(payload)),
             3 if Self::from_id(payload).is_some() => return Some(Self::Optional(payload)),
             4 if Self::from_id(payload).is_some() => return Some(Self::List(payload)),
+            5 if Self::from_id(payload).is_some() => return Some(Self::Offset(payload)),
             0 => (),
             _ => return None,
         }
@@ -104,6 +106,7 @@ impl Type {
             Self::Class(id) => (id << 3) | 2,
             Self::Optional(id) => (id << 3) | 3,
             Self::List(id) => (id << 3) | 4,
+            Self::Offset(id) => (id << 3) | 5,
         }
     }
     pub fn integer(self) -> bool {
@@ -169,6 +172,7 @@ impl std::fmt::Display for Type {
             Self::Class(_) => "class",
             Self::Optional(_) => "optional",
             Self::List(_) => "List",
+            Self::Offset(_) => "offset",
         })
     }
 }
@@ -328,7 +332,11 @@ pub fn operation(op: u32, ty: Type, a: Value, b: Value, c: Value) -> Result<Valu
         .ok_or("arithmetic overflow, division by zero or invalid clamp range")?;
         return integer(value, ty);
     }
-    if matches!(ty, Type::Bool | Type::None | Type::Enum(_)) && matches!(op, 7 | 8) {
+    if matches!(
+        ty,
+        Type::Bool | Type::None | Type::Enum(_) | Type::Offset(_)
+    ) && matches!(op, 7 | 8)
+    {
         return Ok(Value {
             lo: (if op == 7 { a == b } else { a != b }) as u64,
             hi: 0,
@@ -451,6 +459,7 @@ pub fn display(value: Value, ty: Type) -> Result<String, String> {
                 return display(value, inner);
             }
         }
+        Type::Offset(_) => "<offset>".into(),
         _ => unreachable!("integer values are handled before the type match"),
     })
 }

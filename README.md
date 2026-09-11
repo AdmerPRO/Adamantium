@@ -289,7 +289,25 @@ Their contents are immutable literals; concatenation and indexing are not yet
 supported. `bool` prints `true` or `false`; `None` prints `None`. A variable of
 type `None` can only hold `None`; optional parameters and fields are described below.
 
-`offset` remains unsupported.
+### Safe offsets
+
+An offset refers to the storage of a local variable. Reading through it returns
+the variable's current value and preserves its type:
+
+```adamantium
+var source = 10;
+var address = source.offset;
+source = 20;
+var copy = address.by_offset; // 20
+```
+
+`source.get_offset()` is an alias for `source.offset`, and
+`address.value_by_offset` is an alias for `address.by_offset`. The retrieved
+value is a copy, so changing `copy` does not change `source`.
+
+Offsets cannot be printed, stored in lists, exposed through function or class
+signatures, or dereferenced after their target is removed. These rules keep an
+offset inside the stack frame where its target remains valid.
 
 Type aliases use `define` at file level before their first use:
 

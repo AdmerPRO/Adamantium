@@ -435,3 +435,24 @@ fn try_expressions_have_optional_string_type() {
         Type::Optional(Type::String.id())
     );
 }
+
+#[test]
+fn offsets_preserve_types_and_reject_unsafe_uses() {
+    let program = checked(
+        "fun main() { var source=10:i16; var address=source.offset; var value=address.by_offset; print.newline(value); }",
+    )
+    .unwrap();
+    assert_eq!(program.functions[0].types[1], Type::Offset(Type::I16.id()));
+    assert_eq!(program.functions[0].types[2], Type::I16);
+
+    for source in [
+        "fun main() { var source=10; var address=source.offset; source.remove; var value=address.by_offset; }",
+        "fun main() { var source=10; var address=source.offset; print.newline(address); }",
+        "fun main() { var source=10; var address=source.offset; var values=List[address]; }",
+    ] {
+        assert!(
+            checked(source).is_err(),
+            "unsafe offset use must fail: {source}"
+        );
+    }
+}

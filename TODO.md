@@ -214,7 +214,7 @@ Implement:
 * [x] `string`
 * [x] `bool`
 * [x] `None`
-* [ ] `offset`
+* [x] `offset`
 * [x] `List` - homogeneous literals, explicit element types, indexing and element assignment
 * [x] `enum` - named variants with distinct inferred types
 * [x] `class` - required typed fields, methods, construction and value copying
@@ -711,14 +711,14 @@ var offset = a.get_offset();
 var value = offset.value_by_offset;
 ```
 
-* [ ] Implement `offset`
-* [ ] Implement `get_offset()`
-* [ ] Implement `value_by_offset`
-* [ ] Preserve original value type where possible
-* [ ] Define offset lifetime rules
-* [ ] Prevent invalid memory access
-* [ ] Prevent use-after-free
-* [ ] Integrate offsets with the memory-safety system
+* [x] Implement `offset` and `.offset`
+* [x] Implement `get_offset()`
+* [x] Implement `value_by_offset` and `by_offset`
+* [x] Preserve original value type
+* [x] Define offset lifetime rules - local variables in the current function only
+* [x] Prevent invalid memory access - offsets cannot escape through signatures or containers
+* [x] Prevent use-after-free - dereferencing a removed target is rejected
+* [x] Integrate offsets with compile-time memory-safety checks
 
 ---
 

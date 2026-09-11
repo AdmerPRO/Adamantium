@@ -409,6 +409,37 @@ fn native_try_catches_runtime_errors_and_panics() {
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_offsets_read_current_values_and_preserve_types() {
+    let output = Project::new(
+        r#"
+        fun main() {
+            var source = 10:i16;
+            var address = source.offset;
+            source = 20;
+            var copied = address.by_offset;
+            print.newline(copied);
+            copied = 15;
+            print.newline(source);
+
+            var text = "before";
+            var text_address = text.get_offset();
+            text = "after";
+            print.newline(text_address.value_by_offset);
+        }
+    "#,
+    )
+    .run();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"20\r\n20\r\nafter\r\n");
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_optional_enums_methods_and_matching() {
     let output = Project::new(
         r#"

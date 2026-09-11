@@ -208,6 +208,16 @@ impl Generator {
                     memory(result, 8)
                 ));
             }
+            Kind::Address(slot) => {
+                self.emit(format!(
+                    "    lea rax, {}\n    xor edx, edx",
+                    memory(*slot, 0)
+                ));
+            }
+            Kind::Dereference(value) => {
+                self.expression(value);
+                self.emit("    mov r11, rax\n    mov rax, [r11]\n    mov rdx, [r11 + 8]");
+            }
             Kind::Construct(id, fields, constructor) => {
                 let mark = self.next_slot;
                 let mut values = Vec::new();

@@ -291,6 +291,10 @@ fn visit(expr: &Expr, reads: &mut HashSet<usize>, calls: &mut HashSet<String>) {
                 visit_statement(statement, &mut declared, reads, calls);
             }
         }
+        Expr::Offset(slot) => {
+            reads.insert(*slot);
+        }
+        Expr::Dereference(value, _) => visit(value, reads, calls),
         _ => (),
     }
 }

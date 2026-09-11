@@ -795,3 +795,26 @@ fn try_blocks_reject_control_flow_that_would_skip_cleanup() {
         assert!(error.contains("cannot leave a try block"), "{error}");
     }
 }
+
+#[test]
+fn parses_offset_creation_and_reads() {
+    let statements = main_statements(
+        "fun main() { var source=10; var first=source.offset; var value=first.by_offset; var second=source.get_offset(); var other=second.value_by_offset; }",
+    );
+    assert!(matches!(
+        statements[1],
+        Statement::Assign(_, Expr::Offset(0))
+    ));
+    assert!(matches!(
+        statements[2],
+        Statement::Assign(_, Expr::Dereference(_, _))
+    ));
+    assert!(matches!(
+        statements[3],
+        Statement::Assign(_, Expr::Offset(0))
+    ));
+    assert!(matches!(
+        statements[4],
+        Statement::Assign(_, Expr::Dereference(_, _))
+    ));
+}

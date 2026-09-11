@@ -91,6 +91,8 @@ pub enum Expr {
     Compare(Comparison, Box<Expr>, Box<Expr>),
     Call(Call),
     Try(Vec<Statement>),
+    Offset(usize),
+    Dereference(Box<Expr>, Position),
 }
 #[derive(Debug)]
 pub struct Call {
@@ -1043,7 +1045,24 @@ impl Parser {
         {
             self.next();
             let position = self.position();
-            let member = self.name()?;
+            let Token::Word(member) = self.next() else {
+                return Err(position.error("expected a name after '.'"));
+            };
+            if member == "offset" || member == "get_offset" {
+                let Expr::Variable(slot) = left else {
+                    return Err(position.error("offset can only reference a local variable"));
+                };
+                if member == "get_offset" {
+                    self.symbol('(')?;
+                    self.symbol(')')?;
+                }
+                left = Expr::Offset(slot);
+                continue;
+            }
+            if member == "by_offset" || member == "value_by_offset" {
+                left = Expr::Dereference(Box::new(left), position);
+                continue;
+            }
             if member == "as" {
                 self.symbol('(')?;
                 let ty = self.type_name()?;

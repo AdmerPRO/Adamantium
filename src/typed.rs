@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 #[cfg(test)]
 #[path = "typed_tests.rs"]
 mod tests;
@@ -29,6 +29,8 @@ pub enum Kind {
     Field(Box<Expression>, usize),
     MethodCall(String, Box<Expression>, Vec<Expression>),
     Try(Vec<Instruction>),
+    Address(usize),
+    Dereference(Box<Expression>),
 }
 pub enum Instruction {
     Noop,
@@ -89,6 +91,8 @@ struct Checker<'a> {
     signatures: &'a HashMap<String, Signature>,
     classes: &'a [ClassDefinition],
     owner: Option<u32>,
+    offset_origins: HashMap<usize, usize>,
+    removed: HashSet<usize>,
 }
 
 pub fn check(program: &syntax::Program) -> Result<Program, String> {
@@ -116,6 +120,8 @@ pub fn check(program: &syntax::Program) -> Result<Program, String> {
             signatures: &signatures,
             classes: &program.classes,
             owner: function.owner,
+            offset_origins: HashMap::new(),
+            removed: HashSet::new(),
         };
         let mut instructions = Vec::new();
         for (statement, position) in function.statements.iter().zip(&function.positions) {
@@ -326,6 +332,11 @@ impl Checker<'_> {
             },
             Expr::Compare(_, _, _) => Some(Type::Bool),
             Expr::Try(_) => Some(Type::Optional(Type::String.id())),
+            Expr::Offset(slot) => self.types[*slot].map(|ty| Type::Offset(ty.id())),
+            Expr::Dereference(value, _) => self.hint(value).and_then(|ty| match ty {
+                Type::Offset(inner) => Type::from_id(inner),
+                _ => None,
+            }),
             _ => None,
         }
     }
@@ -482,6 +493,9 @@ impl Checker<'_> {
                 };
                 if element_ty.id() > u32::MAX >> 3 {
                     return Err("type nesting exceeds the supported depth".into());
+                }
+                if matches!(element_ty, Type::Offset(_)) {
+                    return Err("offset values cannot be stored in Lists".into());
                 }
                 Expression {
                     ty: Type::List(element_ty.id()),
@@ -731,6 +745,35 @@ impl Checker<'_> {
                         .collect::<Result<_, _>>()?,
                 ),
             },
+            Expr::Offset(slot) => {
+                let pointee =
+                    self.types[*slot].ok_or("cannot take the offset of an untyped variable")?;
+                if matches!(pointee, Type::Offset(_)) {
+                    return Err("offsets of offsets are not supported".into());
+                }
+                Expression {
+                    ty: Type::Offset(pointee.id()),
+                    kind: Kind::Address(*slot),
+                }
+            }
+            Expr::Dereference(value, position) => {
+                let value = self.expression(value, None)?;
+                let Type::Offset(inner) = value.ty else {
+                    return Err(
+                        position.error(format!("by_offset requires an offset, found {}", value.ty))
+                    );
+                };
+                if let Kind::Variable(offset_slot) = &value.kind
+                    && let Some(target) = self.offset_origins.get(offset_slot)
+                    && self.removed.contains(target)
+                {
+                    return Err(position.error("offset target was removed"));
+                }
+                Expression {
+                    ty: Type::from_id(inner).ok_or("invalid offset value type")?,
+                    kind: Kind::Dereference(Box::new(value)),
+                }
+            }
         };
         if let Some(ty) = expected {
             self.convert(result, ty)
@@ -744,6 +787,19 @@ impl Checker<'_> {
             Statement::Assign(slot, expr) => {
                 let value = self.expression(expr, self.types[*slot])?;
                 self.types[*slot] = Some(value.ty);
+                match &value.kind {
+                    Kind::Address(source) => {
+                        self.offset_origins.insert(*slot, *source);
+                    }
+                    Kind::Variable(source) if matches!(value.ty, Type::Offset(_)) => {
+                        if let Some(origin) = self.offset_origins.get(source).copied() {
+                            self.offset_origins.insert(*slot, origin);
+                        }
+                    }
+                    _ => {
+                        self.offset_origins.remove(slot);
+                    }
+                }
                 Instruction::Assign(*slot, value)
             }
             Statement::Disconnect(destination, source) => {
@@ -755,6 +811,7 @@ impl Checker<'_> {
                 Instruction::Disconnect(*destination, *source)
             }
             Statement::Remove(slot) => {
+                self.removed.insert(*slot);
                 let ty = self.types[*slot].ok_or("unknown removed variable type")?;
                 let hook = if let Type::Class(id) = ty {
                     self.classes[id as usize]
@@ -785,7 +842,11 @@ impl Checker<'_> {
                 )
             }
             Statement::Print(expr, newline) => {
-                Instruction::Print(self.expression(expr, None)?, *newline)
+                let value = self.expression(expr, None)?;
+                if matches!(value.ty, Type::Offset(_)) {
+                    return Err("offset values cannot be printed".into());
+                }
+                Instruction::Print(value, *newline)
             }
             Statement::Message(expr, panic, position) => Instruction::Message(
                 self.expression(expr, Some(Type::String))?,
