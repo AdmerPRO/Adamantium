@@ -1245,6 +1245,7 @@ Create the official standard library.
 * [x] Check spelling with Typos on all three CI runners
 * [x] Build release binaries
 * [x] Test installed CLI on Windows x86-64 - help, version, build and run
+* [x] Test installed CLI on Linux x86-64 - project creation, check, ELF build, run, tests, clean and clear
 * [x] Test Windows - compiler checks and native EXE regression tests configured
 * [x] Test Linux - compiler tests and native generated executable test
 * [x] Test macOS - compiler build/tests configured; no macOS program backend
@@ -1273,7 +1274,7 @@ Create the official standard library.
 * [x] Code generation tests
 * [x] NASM generation tests
 * [x] Runtime tests
-* [x] CLI tests - command parsing and installed Windows x86-64 CLI workflow
+* [x] CLI tests - command parsing and installed Windows and Linux x86-64 CLI workflows
 * [x] Integration tests
 * [x] Regression tests
 
