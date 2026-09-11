@@ -697,6 +697,18 @@ ordinary objects; accessing a field or method through `None` produces a runtime 
 
 ### Panic and warnings
 
+Use `try { ... }` when a runtime failure should become a value instead of
+terminating the program. It returns `None` after a successful block and an
+error string after a failed block. Execution resumes after the block, and
+statements after the failure inside that block are skipped.
+
+```adamantium
+var error = try {
+    var value = 10 / 0;
+};
+print.newline(error);
+```
+
 `warn("message");` writes a warning and its source line to stderr, then continues.
 `panic("message");` writes the panic and source line to stderr, then immediately
 terminates the program with exit code `2`.

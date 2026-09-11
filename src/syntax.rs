@@ -90,6 +90,7 @@ pub enum Expr {
     Logical(LogicalOperator, Box<Expr>, Box<Expr>),
     Compare(Comparison, Box<Expr>, Box<Expr>),
     Call(Call),
+    Try(Vec<Statement>),
 }
 #[derive(Debug)]
 pub struct Call {
@@ -197,6 +198,7 @@ struct Parser {
     traits: HashMap<String, TraitDefinition>,
     type_aliases: HashMap<String, Type>,
     loop_depth: usize,
+    try_depth: usize,
     lifecycle_hook: Option<String>,
     symbol_aliases: HashMap<String, SymbolAlias>,
 }
@@ -933,6 +935,12 @@ impl Parser {
                 Expr::Bool(value == "true")
             }
             Token::Word(value) if value == "None" => Expr::None,
+            Token::Word(value) if value == "try" => {
+                self.try_depth += 1;
+                let body = self.block();
+                self.try_depth -= 1;
+                Expr::Try(body?)
+            }
             Token::Word(value) if value == "List" => {
                 self.symbol('[')?;
                 let mut values = Vec::new();
@@ -1165,6 +1173,11 @@ impl Parser {
         }
         let statement = match self.next() {
             Token::Word(word) if word == "break" || word == "continue" => {
+                if self.try_depth != 0 {
+                    return Err(position.error(format!(
+                        "'{word}' cannot leave a try block; move it outside try"
+                    )));
+                }
                 if self.loop_depth == 0 {
                     return Err(position.error(format!("'{word}' can only be used inside a loop")));
                 }
@@ -1290,6 +1303,11 @@ impl Parser {
                 Statement::Exit
             }
             Token::Word(word) if word == "return" => {
+                if self.try_depth != 0 {
+                    return Err(
+                        position.error("return cannot leave a try block; move it outside try")
+                    );
+                }
                 let Some(result_name) = self.result_name.clone() else {
                     return Err(position.error("main has no named result to return"));
                 };
@@ -2316,6 +2334,7 @@ fn parse_tokens(tokens: Vec<(Token, Position)>) -> Result<Program, String> {
         traits: HashMap::new(),
         type_aliases: HashMap::new(),
         loop_depth: 0,
+        try_depth: 0,
         lifecycle_hook: None,
         symbol_aliases: HashMap::new(),
     };

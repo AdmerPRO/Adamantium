@@ -13,11 +13,19 @@ struct Generator {
     classes: Vec<ClassInfo>,
     next_label: usize,
     loop_stack: Vec<(String, String)>,
+    error_targets: Vec<String>,
+    current_function_name: String,
+    current_function_types: Vec<Type>,
 }
 fn memory(slot: usize, offset: usize) -> String {
     format!("[rbp - {}]", (slot + 1) * 16 - offset)
 }
 impl Generator {
+    fn error_target(&self) -> &str {
+        self.error_targets
+            .last()
+            .expect("code generation requires an error target")
+    }
     fn label(&mut self, prefix: &str) -> String {
         let label = format!("ad_{prefix}_{}", self.next_label);
         self.next_label += 1;
@@ -53,8 +61,9 @@ impl Generator {
     }
     fn print_loaded(&mut self, ty: Type, newline: bool) {
         let slot = self.save();
+        let error = self.error_target().to_string();
         self.emit(format!(
-            "    lea rcx, {}\n    mov edx, {}\n    mov r8d, {}\n    call ad_print\n    test eax, eax\n    jnz ad_exit_error",
+            "    lea rcx, {}\n    mov edx, {}\n    mov r8d, {}\n    call ad_print\n    test eax, eax\n    jnz {error}",
             memory(slot, 0),
             ty.id(),
             u8::from(newline)
@@ -132,6 +141,12 @@ impl Generator {
         if size != 0 {
             self.emit(format!("    add rsp, {size}"));
         }
+        let returned = self.save();
+        let error = self.error_target().to_string();
+        self.emit(format!(
+            "    call ad_has_error\n    test eax, eax\n    jnz {error}"
+        ));
+        self.load(returned);
         self.next_slot = mark;
     }
     fn evaluate(&mut self, operation: u32, ty: Type, from: Type, operands: &[usize]) {
@@ -149,7 +164,8 @@ impl Generator {
                 memory(request, i * 16 + 8)
             ));
         }
-        self.emit(format!("    mov dword {}, {operation}\n    mov dword {}, {}\n    mov dword {}, {}\n    lea rcx, {}\n    call ad_evaluate\n    test eax, eax\n    jnz ad_exit_error\n    mov rax, {}\n    mov rdx, {}", memory(request,64), memory(request,68),ty.id(),memory(request,72),from.id(),memory(request,0),memory(request,48),memory(request,56)));
+        let error = self.error_target().to_string();
+        self.emit(format!("    mov dword {}, {operation}\n    mov dword {}, {}\n    mov dword {}, {}\n    lea rcx, {}\n    call ad_evaluate\n    test eax, eax\n    jnz {error}\n    mov rax, {}\n    mov rdx, {}", memory(request,64), memory(request,68),ty.id(),memory(request,72),from.id(),memory(request,0),memory(request,48),memory(request,56)));
         self.next_slot = mark;
     }
     fn expression(&mut self, expr: &Expression) {
@@ -168,6 +184,30 @@ impl Generator {
             }
             Kind::Variable(slot) => self.load(*slot),
             Kind::Call(name, arguments) => self.call(name, arguments),
+            Kind::Try(instructions) => {
+                let result = self.reserve(1);
+                let failed = self.label("try_failed");
+                let done = self.label("try_done");
+                self.emit("    call ad_try_begin");
+                self.error_targets.push(failed.clone());
+                let context = Function {
+                    name: self.current_function_name.clone(),
+                    parameters: 0,
+                    result: None,
+                    types: self.current_function_types.clone(),
+                    instructions: Vec::new(),
+                    parameter_names: Vec::new(),
+                };
+                self.instructions(instructions, &context);
+                self.error_targets.pop();
+                self.emit(format!(
+                    "    lea rcx, {}\n    call ad_try_end\n    jmp {done}\n{failed}:\n    lea rcx, {}\n    call ad_try_end\n{done}:\n    mov rax, {}\n    mov rdx, {}",
+                    memory(result, 0),
+                    memory(result, 0),
+                    memory(result, 0),
+                    memory(result, 8)
+                ));
+            }
             Kind::Construct(id, fields, constructor) => {
                 let mark = self.next_slot;
                 let mut values = Vec::new();
@@ -276,7 +316,8 @@ impl Generator {
                 let compact = self.label("optional_compact");
                 let done = self.label("optional_unwrapped");
                 self.expression(value);
-                self.emit(format!("    test rdx, rdx\n    jnz {compact}\n    call ad_optional_error\n    jmp ad_exit_error\n{compact}:\n    cmp rdx, 2\n    jne {done}\n    mov r11, rax\n    mov rax, [r11]\n    mov rdx, [r11 + 8]\n{done}:"));
+                let error = self.error_target().to_string();
+                self.emit(format!("    test rdx, rdx\n    jnz {compact}\n    call ad_optional_error\n    jmp {error}\n{compact}:\n    cmp rdx, 2\n    jne {done}\n    mov r11, rax\n    mov rax, [r11]\n    mov rdx, [r11 + 8]\n{done}:"));
             }
             Kind::Not(value) => {
                 self.expression(value);
@@ -384,7 +425,8 @@ impl Generator {
                         u8::from(*panic)
                     ));
                     if *panic {
-                        self.emit("    mov ecx, 2\n    call ExitProcess");
+                        let error = self.error_target().to_string();
+                        self.emit(format!("    jmp {error}"));
                     }
                 }
                 Instruction::Call(expr) => self.expression(expr),
@@ -508,9 +550,13 @@ impl Generator {
         }
     }
     fn function(&mut self, function: &Function) {
+        self.current_function_name.clone_from(&function.name);
+        self.current_function_types.clone_from(&function.types);
         self.next_slot = function.types.len();
         self.max_slot = self.next_slot;
         let start = self.text.len();
+        let error = format!("ad_error_{}", function.name);
+        self.error_targets.push(error.clone());
         for slot in 0..function.parameters {
             self.emit(format!(
                 "    mov rax, [rbp + {}]\n    mov rdx, [rbp + {}]",
@@ -520,6 +566,12 @@ impl Generator {
             self.store(slot);
         }
         self.instructions(&function.instructions, function);
+        self.error_targets.pop();
+        self.emit(format!(
+            "    jmp ad_return_{}\n{error}:\n    call ad_is_trying\n    test eax, eax\n    jnz ad_return_{}\n    mov ecx, 2\n    call ExitProcess",
+            function.name,
+            function.name
+        ));
         self.emit(format!("ad_return_{}:", function.name));
         if let Some(slot) = function.result {
             self.load(slot);
@@ -547,13 +599,20 @@ impl Generator {
         if size != 0 {
             self.emit(format!("    add rsp, {size}"));
         }
+        let returned = self.save();
+        let error = self.error_target().to_string();
+        self.emit(format!(
+            "    call ad_has_error\n    test eax, eax\n    jnz {error}"
+        ));
+        self.load(returned);
     }
     fn emit_list_bounds(&mut self, list: usize, index: usize) {
         let valid = self.label("list_index_valid");
         self.load(index);
         self.emit(format!("    cmp rax, {}\n    jb {valid}", memory(list, 8)));
+        let error = self.error_target().to_string();
         self.emit(format!(
-            "    mov rcx, rax\n    mov rdx, {}\n    call ad_list_error\n    jmp ad_exit_error\n{valid}:",
+            "    mov rcx, rax\n    mov rdx, {}\n    call ad_list_error\n    jmp {error}\n{valid}:",
             memory(list, 8)
         ));
     }
@@ -601,6 +660,9 @@ pub fn assembly_entry(program: &Program, entry: &str) -> String {
         classes: program.classes.clone(),
         next_label: 0,
         loop_stack: Vec::new(),
+        error_targets: Vec::new(),
+        current_function_name: String::new(),
+        current_function_types: Vec::new(),
     };
     let main = program
         .functions
@@ -665,6 +727,10 @@ pub fn assembly_entry(program: &Program, entry: &str) -> String {
             ("ad_list_error", "ad_linux_list_error"),
             ("ad_optional_error", "ad_linux_optional_error"),
             ("ad_parse_arguments", "ad_linux_parse_arguments"),
+            ("ad_try_begin", "ad_linux_try_begin"),
+            ("ad_try_end", "ad_linux_try_end"),
+            ("ad_has_error", "ad_linux_has_error"),
+            ("ad_is_trying", "ad_linux_is_trying"),
         ] {
             generated = generated.replace(
                 &format!("call {windows_name}"),

@@ -774,3 +774,24 @@ fn parses_list_literals_indexing_and_assignment() {
         Statement::Print(Expr::Index(_, _, _), true)
     ));
 }
+
+#[test]
+fn parses_try_blocks_as_expressions() {
+    let program = parse("fun main() { var error = try { print.newline(1); }; }").unwrap();
+    let Statement::Assign(_, Expr::Try(body)) = &program.functions[0].statements[0] else {
+        panic!("try expression expected");
+    };
+    assert!(matches!(body.as_slice(), [Statement::Print(_, true)]));
+}
+
+#[test]
+fn try_blocks_reject_control_flow_that_would_skip_cleanup() {
+    for source in [
+        "fun value() result:int { result=1; var error=try { return result; }; } fun main() {}",
+        "fun main() { loop { var error=try { break; }; } }",
+        "fun main() { loop { var error=try { continue; }; } }",
+    ] {
+        let error = parse(source).unwrap_err();
+        assert!(error.contains("cannot leave a try block"), "{error}");
+    }
+}

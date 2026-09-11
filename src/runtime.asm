@@ -12,6 +12,10 @@ extern ad_object_clone
 extern ad_list_error
 extern ad_optional_error
 extern ad_parse_arguments
+extern ad_try_begin
+extern ad_try_end
+extern ad_has_error
+extern ad_is_trying
 
 section .text
 main:

@@ -285,6 +285,12 @@ fn visit(expr: &Expr, reads: &mut HashSet<usize>, calls: &mut HashSet<String>) {
                 visit(argument, reads, calls);
             }
         }
+        Expr::Try(statements) => {
+            let mut declared = HashSet::new();
+            for statement in statements {
+                visit_statement(statement, &mut declared, reads, calls);
+            }
+        }
         _ => (),
     }
 }

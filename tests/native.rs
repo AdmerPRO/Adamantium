@@ -368,6 +368,47 @@ fn native_panic_reports_source_line_and_stops() {
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_try_catches_runtime_errors_and_panics() {
+    let output = Project::new(
+        r#"
+        fun divide() result:int {
+            result = 10 / 0;
+        }
+        fun main() {
+            var success = try { print.newline("inside"); };
+            print.newline(success);
+            var arithmetic = try {
+                divide();
+                print.newline("unreachable");
+            };
+            print.newline(arithmetic);
+            var panicked = try {
+                panic("caught panic");
+                print.newline("also unreachable");
+            };
+            print.newline(panicked);
+            print.newline("continued");
+        }
+    "#,
+    )
+    .run();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.stdout,
+        b"inside\r\nNone\r\nAdamantium runtime error: arithmetic overflow, division by zero or invalid clamp range\r\nAdamantium program panicked at line 14: caught panic\r\ncontinued\r\n"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!stderr.contains("runtime error"), "{stderr}");
+    assert!(!stderr.contains("panicked"), "{stderr}");
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_optional_enums_methods_and_matching() {
     let output = Project::new(
         r#"

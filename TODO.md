@@ -603,10 +603,10 @@ var err = try {
 }
 ```
 
-* [ ] Implement `try`
-* [ ] Return `None` on success
-* [ ] Return error string on failure
-* [ ] Prevent unhandled runtime errors where required
+* [x] Implement `try`
+* [x] Return `None` on success
+* [x] Return error string on failure
+* [x] Prevent handled runtime errors from terminating the program or reaching stderr
 
 ## `panic`
 

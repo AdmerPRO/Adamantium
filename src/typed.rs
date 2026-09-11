@@ -28,6 +28,7 @@ pub enum Kind {
     Index(Box<Expression>, Box<Expression>),
     Field(Box<Expression>, usize),
     MethodCall(String, Box<Expression>, Vec<Expression>),
+    Try(Vec<Instruction>),
 }
 pub enum Instruction {
     Noop,
@@ -247,7 +248,7 @@ fn promoted(a: Type, b: Type) -> Result<Type, String> {
 
 impl Checker<'_> {
     fn operator_call(
-        &self,
+        &mut self,
         left: &Expr,
         right: &Expr,
         method_name: &str,
@@ -267,15 +268,16 @@ impl Checker<'_> {
                     class.name
                 )
             })?;
-        let signature = &self.signatures[&method.function];
+        let result_ty = self.signatures[&method.function].result;
+        let function = method.function.clone();
         let argument = self.expression(right, Some(Type::Class(id)))?;
         Ok(Expression {
-            ty: signature.result,
-            kind: Kind::MethodCall(method.function.clone(), Box::new(object), vec![argument]),
+            ty: result_ty,
+            kind: Kind::MethodCall(function, Box::new(object), vec![argument]),
         })
     }
     fn arguments(
-        &self,
+        &mut self,
         arguments: &[Expr],
         parameters: &[Type],
     ) -> Result<Vec<Expression>, String> {
@@ -323,6 +325,7 @@ impl Checker<'_> {
                 (a, b) => a.or(b),
             },
             Expr::Compare(_, _, _) => Some(Type::Bool),
+            Expr::Try(_) => Some(Type::Optional(Type::String.id())),
             _ => None,
         }
     }
@@ -361,7 +364,7 @@ impl Checker<'_> {
             kind: Kind::Convert(Box::new(expr)),
         })
     }
-    fn expression(&self, expr: &Expr, expected: Option<Type>) -> Result<Expression, String> {
+    fn expression(&mut self, expr: &Expr, expected: Option<Type>) -> Result<Expression, String> {
         let result = match expr {
             Expr::Integer(value) => {
                 let ty = expected.filter(|t| t.numeric()).unwrap_or(Type::I32);
@@ -513,9 +516,11 @@ impl Checker<'_> {
             }
             Expr::Call(call) => {
                 let signature = self.signatures.get(&call.name).ok_or("unknown function")?;
-                let arguments = self.arguments(&call.arguments, &signature.parameters)?;
+                let parameters = signature.parameters.clone();
+                let result_ty = signature.result;
+                let arguments = self.arguments(&call.arguments, &parameters)?;
                 Expression {
-                    ty: signature.result,
+                    ty: result_ty,
                     kind: Kind::Call(call.name.clone(), arguments),
                 }
             }
@@ -588,8 +593,10 @@ impl Checker<'_> {
                     return Err(position
                         .error(format!("invalid access: method '{method_name}' is private")));
                 }
-                let signature = &self.signatures[&method.function];
-                let method_parameters = &signature.parameters[1..];
+                let method_function = method.function.clone();
+                let signature = &self.signatures[&method_function];
+                let method_parameters = signature.parameters[1..].to_vec();
+                let result_ty = signature.result;
                 let required = method_parameters
                     .iter()
                     .filter(|ty| !matches!(ty, Type::Optional(_)))
@@ -601,10 +608,10 @@ impl Checker<'_> {
                         arguments.len()
                     )));
                 }
-                let arguments = self.arguments(arguments, method_parameters)?;
+                let arguments = self.arguments(arguments, &method_parameters)?;
                 Expression {
-                    ty: signature.result,
-                    kind: Kind::MethodCall(method.function.clone(), Box::new(object), arguments),
+                    ty: result_ty,
+                    kind: Kind::MethodCall(method_function, Box::new(object), arguments),
                 }
             }
             Expr::Negate(value) => {
@@ -713,6 +720,15 @@ impl Checker<'_> {
                     *operator,
                     Box::new(self.expression(a, Some(Type::Bool))?),
                     Box::new(self.expression(b, Some(Type::Bool))?),
+                ),
+            },
+            Expr::Try(statements) => Expression {
+                ty: Type::Optional(Type::String.id()),
+                kind: Kind::Try(
+                    statements
+                        .iter()
+                        .map(|statement| self.statement(statement))
+                        .collect::<Result<_, _>>()?,
                 ),
             },
         };

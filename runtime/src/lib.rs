@@ -1,8 +1,65 @@
 pub mod types;
 
+use std::cell::{Cell, RefCell};
 use std::ffi::{CStr, c_char};
 use std::io::Write;
 use types::{Type, Value};
+
+thread_local! {
+    static TRY_DEPTH: Cell<usize> = const { Cell::new(0) };
+    static LAST_ERROR: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+fn report_error(message: String) {
+    let handled = TRY_DEPTH.get() != 0;
+    if handled {
+        LAST_ERROR.with_borrow_mut(|error| *error = Some(message));
+    } else {
+        eprintln!("{message}");
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ad_try_begin() {
+    if TRY_DEPTH.get() == 0 {
+        LAST_ERROR.with_borrow_mut(|error| *error = None);
+    }
+    TRY_DEPTH.set(TRY_DEPTH.get() + 1);
+}
+
+/// # Safety
+/// `output` must point to writable memory for one `Value`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ad_try_end(output: *mut Value) {
+    TRY_DEPTH.set(TRY_DEPTH.get().saturating_sub(1));
+    let Some(output) = (unsafe { output.as_mut() }) else {
+        return;
+    };
+    let Some(error) = LAST_ERROR.with_borrow_mut(Option::take) else {
+        *output = Value::default();
+        return;
+    };
+    let bytes = error.into_bytes().into_boxed_slice();
+    let value = Value {
+        lo: bytes.as_ptr() as u64,
+        hi: bytes.len() as u64,
+    };
+    std::mem::forget(bytes);
+    *output = Value {
+        lo: Box::into_raw(Box::new(value)) as u64,
+        hi: 2,
+    };
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ad_has_error() -> u32 {
+    u32::from(LAST_ERROR.with_borrow(Option::is_some))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ad_is_trying() -> u32 {
+    u32::from(TRY_DEPTH.get() != 0)
+}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn ad_object_new(field_count: usize) -> *mut Value {
@@ -23,13 +80,15 @@ pub unsafe extern "C" fn ad_object_clone(source: *const Value, field_count: usiz
 
 #[unsafe(no_mangle)]
 pub extern "C" fn ad_list_error(index: usize, length: usize) -> u32 {
-    eprintln!("Adamantium runtime error: List index {index} is out of bounds for length {length}");
+    report_error(format!(
+        "Adamantium runtime error: List index {index} is out of bounds for length {length}"
+    ));
     2
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn ad_optional_error() -> u32 {
-    eprintln!("Adamantium runtime error: cannot access a field or method through None");
+    report_error("Adamantium runtime error: cannot access a field or method through None".into());
     2
 }
 
@@ -181,7 +240,7 @@ pub unsafe extern "C" fn ad_evaluate(request: *mut Request) -> u32 {
             0
         }
         Err(error) => {
-            let _ = writeln!(std::io::stderr(), "Adamantium runtime error: {error}");
+            report_error(format!("Adamantium runtime error: {error}"));
             2
         }
     }
@@ -233,7 +292,9 @@ pub unsafe extern "C" fn ad_message(message: *const Value, line: usize, panic: u
     let bytes = unsafe { std::slice::from_raw_parts(message.lo as *const u8, message.hi as usize) };
     let text = String::from_utf8_lossy(bytes);
     if panic != 0 {
-        eprintln!("Adamantium program panicked at line {line}: {text}");
+        report_error(format!(
+            "Adamantium program panicked at line {line}: {text}"
+        ));
     } else {
         eprintln!("Adamantium program warned at line {line}: {text}");
     }

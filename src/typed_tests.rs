@@ -423,3 +423,15 @@ fn wide_optional_values_and_nested_classes_are_typed() {
     );
     assert!(result.is_ok(), "{:?}", result.err());
 }
+
+#[test]
+fn try_expressions_have_optional_string_type() {
+    let program = checked(
+        "fun main() { var result = try { var value=1; value =/ 0; }; print.newline(result); }",
+    )
+    .unwrap();
+    assert_eq!(
+        *program.functions[0].types.last().unwrap(),
+        Type::Optional(Type::String.id())
+    );
+}

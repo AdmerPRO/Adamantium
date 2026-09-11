@@ -11,6 +11,10 @@ extern ad_object_clone
 extern ad_list_error
 extern ad_optional_error
 extern ad_parse_arguments
+extern ad_try_begin
+extern ad_try_end
+extern ad_has_error
+extern ad_is_trying
 
 section .text
 main:
@@ -92,5 +96,30 @@ ad_linux_parse_arguments:
     mov r8, [rsp + 40]
     sub rsp, 8
     call ad_parse_arguments
+    add rsp, 8
+    ret
+
+ad_linux_try_begin:
+    sub rsp, 8
+    call ad_try_begin
+    add rsp, 8
+    ret
+
+ad_linux_try_end:
+    mov rdi, rcx
+    sub rsp, 8
+    call ad_try_end
+    add rsp, 8
+    ret
+
+ad_linux_has_error:
+    sub rsp, 8
+    call ad_has_error
+    add rsp, 8
+    ret
+
+ad_linux_is_trying:
+    sub rsp, 8
+    call ad_is_trying
     add rsp, 8
     ret
