@@ -109,6 +109,27 @@ from `project.toml`. On Windows, the compiler finds Visual Studio with
 `vswhere` and configures the x64 linker automatically, so these commands work
 from regular PowerShell and Command Prompt sessions.
 
+### WASM packages
+
+Declare Adamantium WASM packages in `requirement.toml`:
+
+```toml
+[packages]
+"https://github.com/AdmerPRO/Math" = "1.0.0"
+```
+
+Install them with `adamantium install [PROJECT_DIRECTORY]`. Version `1.0.0`
+selects the GitHub release tag `adamantium_packet_1_0_0` and downloads its
+`adamantium_packet.wasm` asset into
+`packages/Math/1.0.0/adamantium_packet.wasm`. Sources are currently restricted
+to HTTPS repositories in the `AdmerPRO` GitHub organization. Versions must use
+`MAJOR.MINOR.PATCH`, downloads must remain on HTTPS, and files are checked for a
+valid WebAssembly header. Set `ADAMANTIUM_CURL` only when a custom compatible
+downloader is required.
+
+Package installation is implemented; importing or executing functions from the
+downloaded WASM module is not implemented yet.
+
 ### Modules, pack, and use
 
 Adamantium projects may contain multiple `.ad` files under `code`. Load a module

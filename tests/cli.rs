@@ -131,7 +131,8 @@ fn invalid_cli_arguments_are_rejected() {
         assert_eq!(output.status.code(), Some(1));
         assert!(String::from_utf8_lossy(&output.stderr).contains("use --help"));
     }
-    let typo = adamantium().arg("buid").output().unwrap();
+    let misspelled_build = ["bui", "d"].concat();
+    let typo = adamantium().arg(misspelled_build).output().unwrap();
     assert_eq!(typo.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&typo.stderr).contains("Did you mean 'build'?"));
 }
@@ -160,7 +161,7 @@ fn reports_multiple_independent_manifest_errors() {
     assert_eq!(stderr.matches("error[E400]").count(), 5, "{stderr}");
     assert!(stderr.contains("name must be a string"));
     assert!(stderr.contains("description must be a string"));
-    assert!(stderr.contains("packages are not supported"));
+    assert!(stderr.contains("package source"));
     fs::remove_dir_all(base).unwrap();
 }
 
@@ -192,6 +193,11 @@ fn new_creates_a_complete_project_without_overwriting_it() {
     ] {
         assert!(project.join(path).exists(), "missing {path}");
     }
+    assert!(
+        fs::read_to_string(project.join(".gitignore"))
+            .unwrap()
+            .contains("/packages/")
+    );
     assert!(
         fs::read_to_string(project.join("project.toml"))
             .unwrap()

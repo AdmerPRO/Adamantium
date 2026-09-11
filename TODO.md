@@ -30,7 +30,7 @@ MyProject/
 ```
 
 * [x] Implement `project.toml`
-* [ ] Implement `requirements.toml`
+* [x] Implement `requirement.toml`
 * [x] Implement `/code`
 * [x] Implement `/target`
 * [x] Validate project structure — required files and metadata; `target` is created when needed
@@ -1009,17 +1009,17 @@ assert(value, "message");
 # 40. Package / Dependency Manager
 
 * [ ] Design package format
-* [ ] Implement `requirements.toml`
-* [ ] Implement dependency resolution
-* [ ] Implement dependency installation
-* [ ] Implement dependency versions
+* [x] Implement `requirement.toml` package declarations
+* [x] Implement dependency resolution — AdmerPRO GitHub release URL and version tag mapping
+* [x] Implement dependency installation — download `adamantium_packet.wasm`
+* [x] Implement dependency versions — `MAJOR.MINOR.PATCH` maps to `adamantium_packet_MAJOR_MINOR_PATCH`
 * [ ] Implement dependency locking
 * [ ] Implement package cache
 * [ ] Implement package publishing
 * [ ] Implement package registry
-* [ ] Detect dependency conflicts
+* [x] Detect duplicate dependency declarations through TOML validation
 * [ ] Detect dependency cycles
-* [ ] Add `adamantium install`
+* [x] Add `adamantium install`
 
 ---
 
@@ -1043,7 +1043,7 @@ adamantium new <project_name_or_path>
 * [x] Implement `build`
 * [x] Implement `new`
 * [x] Implement `check`
-* [ ] Implement `install`
+* [x] Implement `install`
 * [x] Implement `test`
 * [ ] Implement `clean`
 * [ ] Implement `clear`
@@ -1226,7 +1226,7 @@ Create the official standard library.
 * [x] `adamantium check`
 * [x] `adamantium build`
 * [x] `adamantium run`
-* [ ] `adamantium install`
+* [x] `adamantium install`
 * [ ] `adamantium clean`
 * [ ] `adamantium doctor`
 * [x] `adamantium new`

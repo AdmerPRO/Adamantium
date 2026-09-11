@@ -28,6 +28,7 @@ fn main() -> ExitCode {
 const HELP: &str = "Adamantium compiler (Windows x64)\n\
 Usage:\n\
   adamantium check [PROJECT_DIRECTORY]\n\
+  adamantium install [PROJECT_DIRECTORY]\n\
   adamantium build [PROJECT_DIRECTORY]\n\
   adamantium run [PROJECT_DIRECTORY] [--name value ...]\n\
   adamantium test list [PROJECT_DIRECTORY]\n\
@@ -44,6 +45,7 @@ enum Action {
     Help,
     Version,
     Check(PathBuf),
+    Install(PathBuf),
     TestList(PathBuf),
     TestRun(PathBuf, Option<String>, bool),
     Build(PathBuf),
@@ -54,6 +56,13 @@ enum Action {
 type SourceFiles = Vec<(String, String)>;
 type ProjectSources = (PathBuf, String, SourceFiles);
 
+#[derive(Debug, PartialEq)]
+struct Package {
+    name: String,
+    source: String,
+    version: String,
+}
+
 fn cli(args: Vec<OsString>) -> Result<ExitCode, String> {
     match action(args)? {
         Action::Help => println!("{HELP}"),
@@ -62,6 +71,7 @@ fn cli(args: Vec<OsString>) -> Result<ExitCode, String> {
             check(&root)?;
             println!("Checked {}", root.display());
         }
+        Action::Install(root) => install_packages(&root)?,
         Action::TestList(root) => list_tests(&root)?,
         Action::TestRun(root, filter, verbose) => {
             return run_tests(&root, filter.as_deref(), verbose);
@@ -121,6 +131,11 @@ fn action(args: Vec<OsString>) -> Result<Action, String> {
         no_more_args(args)?;
         return Ok(Action::Check(root.into()));
     }
+    if first == "install" {
+        let root = args.next().map_or_else(current_directory, Ok)?;
+        no_more_args(args)?;
+        return Ok(Action::Install(root.into()));
+    }
     if first == "run" {
         let remaining = args.collect::<Vec<_>>();
         let (root, arguments) = if remaining
@@ -179,7 +194,8 @@ fn action(args: Vec<OsString>) -> Result<Action, String> {
     }
     let text = first.to_string_lossy();
     if !Path::new(&first).exists()
-        && let Some(command) = closest_name(&text, &["build", "check", "new", "run", "test"])
+        && let Some(command) =
+            closest_name(&text, &["build", "check", "install", "new", "run", "test"])
     {
         return Err(format!(
             "unknown command '{text}'. Did you mean '{command}'? use --help."
@@ -443,7 +459,7 @@ fn create_project(root: &Path) -> Result<(), String> {
         "fun main() {\n    print.newline(\"Hello, Adamantium!\");\n}\n",
     )
     .map_err(|e| format!("could not create code/main.ad: {e}"))?;
-    fs::write(root.join(".gitignore"), "/target/\n")
+    fs::write(root.join(".gitignore"), "/target/\n/packages/\n")
         .map_err(|e| format!("could not create .gitignore: {e}"))?;
     Ok(())
 }
@@ -526,6 +542,129 @@ fn check(root: &Path) -> Result<(), String> {
     analyze(root).map(|_| ())
 }
 
+fn packages(table: &toml::Table) -> Result<Vec<Package>, String> {
+    let Some(values) = table.get("packages").and_then(toml::Value::as_table) else {
+        return Err("requirement.toml: expected a [packages] table".into());
+    };
+    if table.keys().any(|key| key != "packages") {
+        return Err("requirement.toml: only the [packages] table is supported".into());
+    }
+    let mut result = Vec::new();
+    for (source, value) in values {
+        let version = value.as_str().ok_or_else(|| {
+            format!("requirement.toml: package '{source}' version must be a string")
+        })?;
+        let name = source
+            .strip_prefix("https://github.com/AdmerPRO/")
+            .filter(|name| {
+                !name.is_empty()
+                    && !name.contains('/')
+                    && name
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+            })
+            .ok_or_else(|| {
+                format!(
+                    "requirement.toml: package source '{source}' must be an https://github.com/AdmerPRO/<name> URL"
+                )
+            })?;
+        let parts = version.split('.').collect::<Vec<_>>();
+        if parts.len() != 3
+            || parts
+                .iter()
+                .any(|part| part.is_empty() || !part.bytes().all(|byte| byte.is_ascii_digit()))
+        {
+            return Err(format!(
+                "requirement.toml: package '{source}' version must use MAJOR.MINOR.PATCH"
+            ));
+        }
+        result.push(Package {
+            name: name.into(),
+            source: source.into(),
+            version: version.into(),
+        });
+    }
+    result.sort_by(|left, right| left.name.cmp(&right.name));
+    Ok(result)
+}
+
+fn install_packages(root: &Path) -> Result<(), String> {
+    let requested_root = root;
+    let root = requested_root
+        .canonicalize()
+        .map_err(|error| format!("{}: {error}", requested_root.display()))?;
+    let requirements = read_toml(&root.join("requirement.toml"))?;
+    let packages = packages(&requirements)?;
+    if packages.is_empty() {
+        println!("No packages to install");
+        return Ok(());
+    }
+    for package in &packages {
+        let directory = root
+            .join("packages")
+            .join(&package.name)
+            .join(&package.version);
+        fs::create_dir_all(&directory)
+            .map_err(|error| format!("could not create {}: {error}", directory.display()))?;
+        let destination = directory.join("adamantium_packet.wasm");
+        let temporary = directory.join("adamantium_packet.wasm.download");
+        let tag = format!("adamantium_packet_{}", package.version.replace('.', "_"));
+        let url = format!(
+            "{}/releases/download/{tag}/adamantium_packet.wasm",
+            package.source
+        );
+        let downloader = env::var_os("ADAMANTIUM_CURL").unwrap_or_else(|| {
+            if cfg!(windows) {
+                "curl.exe".into()
+            } else {
+                "curl".into()
+            }
+        });
+        let status = Command::new(downloader)
+            .args([
+                "-fL",
+                "--proto",
+                "=https",
+                "--proto-redir",
+                "=https",
+                "--output",
+            ])
+            .arg(&temporary)
+            .arg(&url)
+            .status()
+            .map_err(|error| format!("could not download package '{}': {error}", package.name))?;
+        if !status.success() {
+            let _ = fs::remove_file(&temporary);
+            return Err(format!(
+                "failed to download package '{}' version {} from {url}",
+                package.name, package.version
+            ));
+        }
+        let bytes = fs::read(&temporary)
+            .map_err(|error| format!("could not read downloaded package: {error}"))?;
+        if !bytes.starts_with(b"\0asm\x01\0\0\0") {
+            let _ = fs::remove_file(&temporary);
+            return Err(format!(
+                "package '{}' did not contain a valid WebAssembly binary",
+                package.name
+            ));
+        }
+        if destination.exists() {
+            fs::remove_file(&destination)
+                .map_err(|error| format!("could not replace {}: {error}", destination.display()))?;
+        }
+        fs::rename(&temporary, &destination)
+            .map_err(|error| format!("could not install {}: {error}", destination.display()))?;
+        println!("Installed {} {}", package.name, package.version);
+    }
+    println!(
+        "Installed {} package{}",
+        packages.len(),
+        if packages.len() == 1 { "" } else { "s" }
+    );
+    Ok(())
+}
+
 fn analyze(root: &Path) -> Result<(PathBuf, String, typed::Program), String> {
     let (root, name, sources) = project_sources(root)?;
     let statements = analyze_sources(&root, &sources)?;
@@ -563,13 +702,8 @@ fn project_sources(root: &Path) -> Result<ProjectSources, String> {
         errors.push("project.toml: authors must be an array of strings".into());
     }
     let requirements = read_toml(&root.join("requirement.toml"))?;
-    for (key, value) in &requirements {
-        if key != "packages" || !value.as_table().is_some_and(|t| t.is_empty()) {
-            errors.push(
-                "requirement.toml: packages are not supported yet; use an empty [packages] table"
-                    .into(),
-            );
-        }
+    if let Err(error) = packages(&requirements) {
+        errors.push(error);
     }
     if !errors.is_empty() {
         return Err(diagnostics::multiple_errors(errors));
@@ -754,5 +888,46 @@ fn execute(command: &mut Command, label: &str) -> Result<(), String> {
         Ok(())
     } else {
         Err(format!("{label} failed ({status})"))
+    }
+}
+
+#[cfg(test)]
+mod package_tests {
+    use super::*;
+
+    #[test]
+    fn parses_admerpro_wasm_packages_and_versions() {
+        let table = r#"[packages]
+"https://github.com/AdmerPRO/Math" = "1.2.3"
+"https://github.com/AdmerPRO/text-tools" = "0.4.0"
+"#
+        .parse::<toml::Table>()
+        .unwrap();
+        assert_eq!(
+            packages(&table).unwrap(),
+            [
+                Package {
+                    name: "Math".into(),
+                    source: "https://github.com/AdmerPRO/Math".into(),
+                    version: "1.2.3".into(),
+                },
+                Package {
+                    name: "text-tools".into(),
+                    source: "https://github.com/AdmerPRO/text-tools".into(),
+                    version: "0.4.0".into(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn rejects_untrusted_package_sources_and_invalid_versions() {
+        for manifest in [
+            "[packages]\n\"https://github.com/Other/Name\"=\"1.0.0\"",
+            "[packages]\n\"https://github.com/AdmerPRO/../Name\"=\"1.0.0\"",
+            "[packages]\n\"https://github.com/AdmerPRO/Name\"=\"latest\"",
+        ] {
+            assert!(packages(&manifest.parse().unwrap()).is_err(), "{manifest}");
+        }
     }
 }
