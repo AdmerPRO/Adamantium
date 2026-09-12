@@ -1,4 +1,7 @@
-![Tests Status](https://github.com/AdamantiumORG/Adamantium/actions/workflows/Proof HTML.yml/badge.svg)
+![CI](https://github.com/AdamantiumORG/demo-repository/actions/workflows/ci.yml/badge.svg)
+![CLI Windows](https://github.com/AdamantiumORG/demo-repository/actions/workflows/cli-windows.yml/badge.svg)
+![CLI Linux](https://github.com/AdamantiumORG/demo-repository/actions/workflows/cli-linux.yml/badge.svg)
+![Portable Windows](https://github.com/AdamantiumORG/demo-repository/actions/workflows/portable-windows.yml/badge.svg)
 
 # Adamantium Compiler
 
