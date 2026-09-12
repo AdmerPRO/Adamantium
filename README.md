@@ -1,3 +1,5 @@
+![Tests Status](https://github.com/AdamantiumORG/Adamantium/actions/workflows/test.yml/badge.svg)
+
 # Adamantium Compiler
 
 A Rust compiler that translates Adamantium source code into NASM assembly and
