@@ -1,4 +1,4 @@
-![Tests Status](https://github.com/AdamantiumORG/Adamantium/actions/workflows/test.yml/badge.svg)
+![Tests Status](https://github.com/AdamantiumORG/Adamantium/actions/workflows/Proof HTML.yml/badge.svg)
 
 # Adamantium Compiler
 
