@@ -119,6 +119,10 @@ ELF64 object with NASM and links it through `cc`.
 
 ### WASM packages
 
+See [Creating Adamantium packages](docs/CREATING_PACKAGES.md) for the complete
+author guide, including repository layout, Rust WASM builds, GitHub Releases,
+automated publishing, installation, versioning, and troubleshooting.
+
 Declare Adamantium WASM packages in `requirement.toml`:
 
 ```toml
