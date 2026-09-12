@@ -48,6 +48,7 @@ pub enum Instruction {
     Until(Expression, Vec<Instruction>),
     Loop(Vec<Instruction>),
     For(usize, Expression, Expression, Vec<Instruction>),
+    ForEach(usize, Expression, Vec<Instruction>),
     Match(
         Expression,
         Vec<(Expression, Vec<Instruction>)>,
@@ -942,6 +943,24 @@ impl Checker<'_> {
                     end,
                     body.iter()
                         .map(|s| self.statement(s))
+                        .collect::<Result<_, _>>()?,
+                )
+            }
+            Statement::ForEach(slot, collection, body) => {
+                let collection = self.expression(collection, None)?;
+                let Type::List(inner) = collection.ty else {
+                    return Err(format!(
+                        "for iteration requires a List, found {}",
+                        collection.ty
+                    ));
+                };
+                let element = Type::from_id(inner).ok_or("invalid List element type")?;
+                self.types[*slot] = Some(element);
+                Instruction::ForEach(
+                    *slot,
+                    collection,
+                    body.iter()
+                        .map(|statement| self.statement(statement))
                         .collect::<Result<_, _>>()?,
                 )
             }

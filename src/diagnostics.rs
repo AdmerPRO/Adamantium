@@ -177,6 +177,13 @@ pub fn warnings(program: &Program) -> Vec<String> {
                         visit_statement(statement, &mut declared, &mut reads, &mut calls);
                     }
                 }
+                Statement::ForEach(slot, collection, body) => {
+                    declared.insert(*slot);
+                    visit(collection, &mut reads, &mut calls);
+                    for statement in body {
+                        visit_statement(statement, &mut declared, &mut reads, &mut calls);
+                    }
+                }
                 Statement::Match(value, arms, fallback) => {
                     visit(value, &mut reads, &mut calls);
                     for (pattern, body) in arms {
@@ -358,6 +365,13 @@ fn visit_statement(
             visit(end, reads, calls);
             for s in body {
                 visit_statement(s, declared, reads, calls);
+            }
+        }
+        Statement::ForEach(slot, collection, body) => {
+            declared.insert(*slot);
+            visit(collection, reads, calls);
+            for statement in body {
+                visit_statement(statement, declared, reads, calls);
             }
         }
         Statement::Match(value, arms, fallback) => {

@@ -552,6 +552,18 @@ fn parses_conditions_and_all_loop_forms() {
 }
 
 #[test]
+fn parses_iteration_over_list_expressions() {
+    let program = parse(
+        "fun main() { var values=List[1,2,3]; for value in values { print.newline(value); } }",
+    )
+    .unwrap();
+    assert!(matches!(
+        program.functions[0].statements[1],
+        Statement::ForEach(_, Expr::Variable(0), _)
+    ));
+}
+
+#[test]
 fn parses_match_branches_and_fallback() {
     let program = parse(
         r#"enum State { ready, done } fun main() {

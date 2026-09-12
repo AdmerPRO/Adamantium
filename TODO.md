@@ -450,12 +450,12 @@ class Player (
 * [x] Implement field types
 * [x] Implement methods
 * [x] Implement `self`
-* [ ] Implement class visibility
+* [x] Implement class visibility - private by default with `pub` and explicit `priv`
 * [x] Implement object creation - named field arguments with value-copy semantics
 * [x] Implement object field access
 * [x] Implement object method calls
 * [x] Implement optional fields
-* [ ] Implement class scope rules
+* [x] Implement class scope rules - module-level declarations and class-owned members with `self`
 
 ---
 
@@ -552,8 +552,8 @@ for i in 0..10 {
 
 * [x] Implement `for`
 * [x] Implement exclusive integer ranges
-* [ ] Implement iteration over lists
-* [ ] Implement iteration over supported collections
+* [x] Implement iteration over lists
+* [x] Implement iteration over supported collections - `List` is the current collection type
 
 ## `while`
 

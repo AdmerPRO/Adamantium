@@ -465,7 +465,12 @@ fun main() {
 ```
 
 Fields and methods are private unless marked `pub`; private members are available
-through `self` inside the same class. Class values use copy semantics, including
+through `self` inside the same class. Classes are private to their module by
+default. `pub class` exports a class, while `priv class` states the default
+explicitly. Class declarations belong to module scope, fields and methods belong
+to their class scope, and `self` is available only inside methods of that class.
+Code outside the owning class cannot access its private fields or methods, and
+code in another module cannot construct a private class. Class values use copy semantics, including
 assignments and ordinary function arguments. Methods modify their receiver.
 All fields are currently required, direct printing of an object is unsupported,
 and class-typed fields are reserved until independent deep copies are implemented.
@@ -630,8 +635,9 @@ if score >= 100 then {
 }
 ```
 
-Adamantium supports `while`, `until`, exclusive integer `for` ranges, and
-infinite `loop` blocks. `until` executes its body while its condition is false.
+Adamantium supports `while`, `until`, exclusive integer `for` ranges, List
+iteration, and infinite `loop` blocks. `until` executes its body while its
+condition is false.
 Both `break` and `continue` may be used inside any loop.
 
 Boolean expressions support `!` or `not`, `&&` or `and`, and `||` or `or`.
@@ -648,6 +654,10 @@ until value >= 4 {
 }
 for index in 0..10 {
     print.newline(index); // Prints 0 through 9.
+}
+var values = List[10, 20, 30];
+for item in values {
+    print.newline(item);
 }
 loop {
     if value == 4 then { break; }

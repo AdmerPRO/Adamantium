@@ -662,6 +662,42 @@ fn native_conditions_and_loops() {
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_for_iterates_over_supported_list_values() {
+    let output = Project::new(
+        r#"
+        class Item(pub value:int) { fun __new__() {} }
+        fun main() {
+            var total=0;
+            for number in List[1,2,3,4] {
+                if number == 2 then { continue; }
+                if number == 4 then { break; }
+                total =+ number;
+            }
+            print.newline(total);
+
+            var words=List["one","two"];
+            for word in words { print.newline(word); }
+
+            var items=List[Item(value=7),Item(value=8)];
+            for item in items {
+                print.newline(item.value);
+            }
+            print.newline(items[0].value);
+        }
+    "#,
+    )
+    .run();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"4\r\none\r\ntwo\r\n7\r\n8\r\n7\r\n");
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_classes_construct_mutate_and_copy_values() {
     let output = Project::new(
         r#"

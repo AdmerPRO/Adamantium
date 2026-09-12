@@ -118,6 +118,7 @@ pub enum Statement {
     Until(Expr, Vec<Statement>),
     Loop(Vec<Statement>),
     For(usize, Expr, Expr, Vec<Statement>),
+    ForEach(usize, Expr, Vec<Statement>),
     Match(Expr, Vec<(Expr, Vec<Statement>)>, Option<Vec<Statement>>),
     Break,
     Continue,
@@ -1540,11 +1541,15 @@ impl Parser {
                 let name = self.name()?;
                 self.word("in")?;
                 let start = self.expression(0)?;
-                self.symbol('.')?;
-                self.symbol('.')?;
-                let end = self.expression(0)?;
-                let slot = self.bind(name, true, false, None, name_position)?;
-                Statement::For(slot, start, end, self.loop_block()?)
+                if self.take(Token::Symbol('.')) {
+                    self.symbol('.')?;
+                    let end = self.expression(0)?;
+                    let slot = self.bind(name, true, false, None, name_position)?;
+                    Statement::For(slot, start, end, self.loop_block()?)
+                } else {
+                    let slot = self.bind(name, true, false, None, name_position)?;
+                    Statement::ForEach(slot, start, self.loop_block()?)
+                }
             }
             "match" => {
                 let value = self.expression(0)?;
@@ -2524,6 +2529,12 @@ fn parse_tokens(tokens: Vec<(Token, Position)>) -> Result<Program, String> {
             Statement::For(_, start, end, body) => {
                 validate_expr(start, signatures)?;
                 validate_expr(end, signatures)?;
+                for statement in body {
+                    validate_statement(statement, signatures)?;
+                }
+            }
+            Statement::ForEach(_, collection, body) => {
+                validate_expr(collection, signatures)?;
                 for statement in body {
                     validate_statement(statement, signatures)?;
                 }

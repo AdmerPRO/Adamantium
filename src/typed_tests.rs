@@ -31,6 +31,21 @@ fn lists_are_homogeneous_and_indexed_by_integers() {
 }
 
 #[test]
+fn list_iteration_infers_the_element_type() {
+    let program = checked(
+        "fun main() { var values=List[1:i16,2:i16]; for value in values { print.newline(value); } }",
+    )
+    .unwrap();
+    assert_eq!(program.functions[0].types[1], Type::I16);
+
+    let error = match checked("fun main() { for value in 10 { print.newline(value); } }") {
+        Ok(_) => panic!("iteration over a scalar must fail"),
+        Err(error) => error,
+    };
+    assert!(error.contains("requires a List"), "{error}");
+}
+
+#[test]
 fn explicit_as_conversions_are_checked() {
     let program = checked(
         "fun main() { var source=300:i32; var narrow=source.as(i16); var decimal=narrow.as(f64); print.newline(decimal); }",

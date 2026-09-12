@@ -530,6 +530,39 @@ impl Generator {
                     self.emit(format!("    jmp {condition}\n{end}:"));
                     self.loop_stack.pop();
                 }
+                Instruction::ForEach(slot, collection, body) => {
+                    let Type::List(inner) = collection.ty else {
+                        unreachable!("typed for-each collection must be a List")
+                    };
+                    let element_ty = Type::from_id(inner).expect("checked List element type");
+                    self.expression(collection);
+                    let list = self.save();
+                    self.emit("    xor eax, eax\n    xor edx, edx");
+                    let index = self.save();
+                    let condition = self.label("for_each_condition");
+                    let increment = self.label("for_each_increment");
+                    let end = self.label("loop_end");
+                    self.loop_stack.push((increment.clone(), end.clone()));
+                    self.emit(format!("{condition}:"));
+                    self.load(index);
+                    self.emit(format!("    cmp rax, {}\n    jae {end}", memory(list, 8)));
+                    self.load(list);
+                    self.emit("    mov r11, rax");
+                    self.load(index);
+                    self.emit(
+                        "    shl rax, 4\n    add r11, rax\n    mov rax, [r11]\n    mov rdx, [r11 + 8]",
+                    );
+                    self.clone_class(element_ty);
+                    self.store(*slot);
+                    self.instructions(body, function);
+                    self.emit(format!(
+                        "{increment}:\n    mov rax, {}\n    inc rax\n    xor edx, edx",
+                        memory(index, 0)
+                    ));
+                    self.store(index);
+                    self.emit(format!("    jmp {condition}\n{end}:"));
+                    self.loop_stack.pop();
+                }
                 Instruction::Match(value, arms, fallback) => {
                     self.expression(value);
                     let matched_value = self.save();
