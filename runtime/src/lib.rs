@@ -394,20 +394,20 @@ pub unsafe extern "C" fn ad_package_call(request: *mut PackageCall) -> u32 {
                     .get_typed_func::<(), ()>(&store, "_start")?
                     .call(&mut store, ())
             });
-        if let Err(error) = execution {
-            if error.i32_exit_status() != Some(0) {
-                drop(store);
-                let stderr = stderr
-                    .try_into_inner()
-                    .map_err(|_| "could not read package stderr".to_owned())?
-                    .into_inner();
-                let stderr = String::from_utf8_lossy(&stderr).into_owned();
-                return Err(if stderr.trim().is_empty() {
-                    error.to_string()
-                } else {
-                    stderr
-                });
-            }
+        if let Err(error) = execution
+            && error.i32_exit_status() != Some(0)
+        {
+            drop(store);
+            let stderr = stderr
+                .try_into_inner()
+                .map_err(|_| "could not read package stderr".to_owned())?
+                .into_inner();
+            let stderr = String::from_utf8_lossy(&stderr).into_owned();
+            return Err(if stderr.trim().is_empty() {
+                error.to_string()
+            } else {
+                stderr
+            });
         }
         drop(store);
         let stdout = stdout
