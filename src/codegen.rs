@@ -1,6 +1,6 @@
 use crate::{
     syntax::{Comparison, LogicalOperator, Operator},
-    typed::{ClassInfo, Expression, Function, Instruction, Kind, Program},
+    typed::{ClassInfo, Expression, Function, Instruction, Kind, PackageFunction, Program},
     types::Type,
 };
 
@@ -16,6 +16,7 @@ struct Generator {
     error_targets: Vec<String>,
     current_function_name: String,
     current_function_types: Vec<Type>,
+    package_functions: std::collections::HashMap<String, PackageFunction>,
 }
 fn memory(slot: usize, offset: usize) -> String {
     format!("[rbp - {}]", (slot + 1) * 16 - offset)
@@ -117,6 +118,10 @@ impl Generator {
         }
     }
     fn call(&mut self, name: &str, arguments: &[Expression]) {
+        if let Some(function) = self.package_functions.get(name).cloned() {
+            self.package_call(&function, arguments);
+            return;
+        }
         let mark = self.next_slot;
         let mut slots = Vec::new();
         for argument in arguments {
@@ -147,6 +152,50 @@ impl Generator {
             "    call ad_has_error\n    test eax, eax\n    jnz {error}"
         ));
         self.load(returned);
+        self.next_slot = mark;
+    }
+    fn package_call(&mut self, function: &PackageFunction, arguments: &[Expression]) {
+        let mark = self.next_slot;
+        let request = self.reserve(14);
+        for offset in (0..224).step_by(8) {
+            self.emit(format!("    mov qword {}, 0", memory(request, offset)));
+        }
+        for (index, argument) in arguments.iter().enumerate() {
+            self.expression(argument);
+            self.emit(format!(
+                "    mov {}, rax\n    mov {}, rdx\n    mov dword {}, {}",
+                memory(request, 32 + index * 16),
+                memory(request, 40 + index * 16),
+                memory(request, 160 + index * 4),
+                argument.ty.id()
+            ));
+        }
+        for (offset, value) in [(0, &function.wasm_path), (16, &function.command)] {
+            let data = self.data.len();
+            self.data.push(value.as_bytes().to_vec());
+            self.emit(format!(
+                "    lea rax, [rel ad_string_{data}]\n    mov {}, rax\n    mov qword {}, {}",
+                memory(request, offset),
+                memory(request, offset + 8),
+                value.len()
+            ));
+        }
+        self.emit(format!(
+            "    mov dword {}, {}\n    mov dword {}, {}\n    mov dword {}, {}",
+            memory(request, 192),
+            arguments.len(),
+            memory(request, 196),
+            function.result.id(),
+            memory(request, 200),
+            function.filesystem
+        ));
+        let error = self.error_target().to_string();
+        self.emit(format!(
+            "    lea rcx, {}\n    call ad_package_call\n    test eax, eax\n    jnz {error}\n    mov rax, {}\n    mov rdx, {}",
+            memory(request, 0),
+            memory(request, 208),
+            memory(request, 216)
+        ));
         self.next_slot = mark;
     }
     fn evaluate(&mut self, operation: u32, ty: Type, from: Type, operands: &[usize]) {
@@ -706,6 +755,7 @@ pub fn assembly_entry(program: &Program, entry: &str) -> String {
         error_targets: Vec::new(),
         current_function_name: String::new(),
         current_function_types: Vec::new(),
+        package_functions: program.package_functions.clone(),
     };
     let main = program
         .functions
@@ -774,6 +824,7 @@ pub fn assembly_entry(program: &Program, entry: &str) -> String {
             ("ad_try_end", "ad_linux_try_end"),
             ("ad_has_error", "ad_linux_has_error"),
             ("ad_is_trying", "ad_linux_is_trying"),
+            ("ad_package_call", "ad_linux_package_call"),
         ] {
             generated = generated.replace(
                 &format!("call {windows_name}"),

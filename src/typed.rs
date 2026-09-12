@@ -71,6 +71,14 @@ pub struct Program {
     pub functions: Vec<Function>,
     pub class_sizes: Vec<usize>,
     pub classes: Vec<ClassInfo>,
+    pub package_functions: HashMap<String, PackageFunction>,
+}
+#[derive(Clone)]
+pub struct PackageFunction {
+    pub wasm_path: String,
+    pub command: String,
+    pub result: Type,
+    pub filesystem: u32,
 }
 #[derive(Clone)]
 pub struct ClassInfo {
@@ -170,6 +178,7 @@ pub fn check(program: &syntax::Program) -> Result<Program, String> {
                     .collect(),
             })
             .collect(),
+        package_functions: HashMap::new(),
     })
 }
 

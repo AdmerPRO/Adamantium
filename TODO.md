@@ -1008,10 +1008,13 @@ assert(value, "message");
 
 # 40. Package / Dependency Manager
 
-* [ ] Design package format
+* [x] Design the `wasi-command-v1` package format
 * [x] Implement `requirement.toml` package declarations
 * [x] Implement dependency resolution - GitHub release URL and version tag mapping
-* [x] Implement dependency installation - download `adamantium_packet.wasm`
+* [x] Implement generic `mod Package` and `use Package:function` bindings
+* [x] Execute package functions through the generic WASI command runtime
+* [x] Implement dependency installation - download WASM and manifest assets
+* [x] Validate package manifests, ABI types, versions, and WASM headers
 * [x] Implement dependency versions - `MAJOR.MINOR.PATCH` maps to `adamantium_packet_MAJOR_MINOR_PATCH`
 * [ ] Implement dependency locking
 * [ ] Implement package cache

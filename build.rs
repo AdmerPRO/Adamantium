@@ -13,6 +13,7 @@ fn main() {
     if target != "x86_64-pc-windows-msvc" && target != "x86_64-unknown-linux-gnu" {
         fs::write(out.join("runtime.lib"), []).unwrap();
         fs::write(out.join("runtime-libraries.txt"), "").unwrap();
+        fs::write(out.join("runtime-auxiliary-libraries.bin"), []).unwrap();
         return;
     }
     let runtime_target = out.join("runtime-build");
@@ -46,7 +47,43 @@ fn main() {
         out.join("runtime.lib"),
     )
     .unwrap();
-    fs::write(out.join("runtime-libraries.txt"), libraries).unwrap();
+    fs::write(out.join("runtime-libraries.txt"), &libraries).unwrap();
+    embed_auxiliary_libraries(&out, &libraries);
+}
+
+fn embed_auxiliary_libraries(out: &Path, libraries: &str) {
+    let mut bundle = Vec::new();
+    for name in libraries
+        .split_whitespace()
+        .filter(|name| name.starts_with("windows.") && name.ends_with(".lib"))
+    {
+        let path = find_cargo_registry_file(name)
+            .unwrap_or_else(|| panic!("could not find Rust runtime import library {name}"));
+        let bytes = fs::read(path).unwrap();
+        let name = name.as_bytes();
+        bundle.extend_from_slice(&(name.len() as u32).to_le_bytes());
+        bundle.extend_from_slice(&(bytes.len() as u64).to_le_bytes());
+        bundle.extend_from_slice(name);
+        bundle.extend_from_slice(&bytes);
+    }
+    fs::write(out.join("runtime-auxiliary-libraries.bin"), bundle).unwrap();
+}
+
+fn find_cargo_registry_file(name: &str) -> Option<PathBuf> {
+    let cargo_home = env::var_os("CARGO_HOME")
+        .map(PathBuf::from)
+        .or_else(|| env::var_os("USERPROFILE").map(|home| PathBuf::from(home).join(".cargo")))
+        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".cargo")))?;
+    let sources = cargo_home.join("registry/src");
+    for registry in fs::read_dir(sources).ok()?.flatten() {
+        for package in fs::read_dir(registry.path()).ok()?.flatten() {
+            let candidate = package.path().join("lib").join(name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
 }
 
 fn build_runtime(target: &str, runtime_target: &Path) -> std::process::Output {

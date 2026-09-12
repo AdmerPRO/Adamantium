@@ -16,6 +16,7 @@ extern ad_try_begin
 extern ad_try_end
 extern ad_has_error
 extern ad_is_trying
+extern ad_package_call
 
 section .text
 main:

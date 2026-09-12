@@ -8,6 +8,8 @@ crate-type = ["staticlib"]
 
 [dependencies]
 rustc_apfloat = "=0.2.3"
+wasmi = "2.0.0"
+wasmi_wasi = "2.0.0"
 
 [profile.release]
 panic = "abort"

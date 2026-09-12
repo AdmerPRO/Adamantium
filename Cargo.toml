@@ -10,3 +10,6 @@ path = "src/main.rs"
 [dependencies]
 toml = "0.8"
 rustc_apfloat = "=0.2.3"
+
+[dev-dependencies]
+wat = "1"

@@ -1,6 +1,26 @@
 use super::*;
 
 #[test]
+fn parses_package_modules_and_single_symbol_imports() {
+    let files = vec![
+        (
+            "ExamplePackage".into(),
+            "pub fun ping(_value:string) result:string { result=_value; }".into(),
+        ),
+        (
+            "".into(),
+            "mod ExamplePackage; use ExamplePackage:ping; fun main() { print.newline(ping(\"ok\")); }"
+                .into(),
+        ),
+    ];
+    assert!(parse_modules(&files).is_ok());
+    assert_eq!(
+        package_dependencies(&files[1].1).unwrap(),
+        vec!["ExamplePackage"]
+    );
+}
+
+#[test]
 fn parses_argumentless_exit() {
     let program = parse("fun main() { exit(); print.newline(\"unreachable\"); }").unwrap();
     assert!(matches!(

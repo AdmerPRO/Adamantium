@@ -914,6 +914,62 @@ impl Drop for Project {
 
 #[test]
 #[ignore = "requires NASM and Visual Studio C++ build tools"]
+fn native_generic_wasi_package_binding() {
+    let project = Project::new(
+        r#"mod ExamplePackage;
+        use ExamplePackage:ping;
+        fun main() {
+            var message = ping();
+            print.newline(message);
+        }"#,
+    );
+    fs::write(
+        project.0.join("requirement.toml"),
+        "[packages]\n\"https://github.com/community/example-package\" = \"1.0.0\"\n",
+    )
+    .unwrap();
+    let package = project
+        .0
+        .join("packages/example-package/1.0.0/adamantium_packet.wasm");
+    fs::create_dir_all(package.parent().unwrap()).unwrap();
+    fs::write(
+        package.parent().unwrap().join("adamantium_packet.toml"),
+        "[package]\nname=\"ExamplePackage\"\nversion=\"1.0.0\"\nabi=\"wasi-command-v1\"\n\n[functions.ping]\nparameters=[]\nresult=\"string\"\n",
+    )
+    .unwrap();
+    fs::write(
+        package,
+        wat::parse_str(
+            r#"
+        (module
+            (import "wasi_snapshot_preview1" "fd_write"
+                (func $fd_write (param i32 i32 i32 i32) (result i32)))
+            (memory (export "memory") 1)
+            (data (i32.const 16) "packet output")
+            (func (export "_start")
+                (i32.store (i32.const 0) (i32.const 16))
+                (i32.store (i32.const 4) (i32.const 13))
+                (drop (call $fd_write
+                    (i32.const 1) (i32.const 0) (i32.const 1) (i32.const 8))))
+        )
+    "#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+
+    let output = project.run();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"packet output\r\n");
+}
+
+#[test]
+#[ignore = "requires NASM and Visual Studio C++ build tools"]
 fn native_arithmetic_clamp_calls_and_returns() {
     let project = Project::new(
         r#"

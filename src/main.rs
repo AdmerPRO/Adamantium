@@ -1,5 +1,6 @@
 mod codegen;
 mod diagnostics;
+mod packages;
 mod syntax;
 mod typed;
 #[allow(dead_code)] // Shared with the separately linked native runtime.
@@ -57,7 +58,7 @@ enum Action {
 }
 
 type SourceFiles = Vec<(String, String)>;
-type ProjectSources = (PathBuf, String, SourceFiles);
+type ProjectSources = (PathBuf, String, SourceFiles, Vec<packages::Binding>);
 
 #[derive(Debug, PartialEq)]
 struct Package {
@@ -335,7 +336,7 @@ fn test_program(
     tests_source: &str,
     test: &TestDefinition,
 ) -> Result<(PathBuf, String, typed::Program), String> {
-    let (root, project_name, mut sources) = project_sources(root)?;
+    let (root, project_name, mut sources, bindings) = project_sources(root)?;
     let main = sources
         .iter_mut()
         .find(|(module, _)| module.is_empty())
@@ -346,7 +347,7 @@ fn test_program(
         "\nfun __adamantium_test_entry() result:None {{ {}(); }}\n",
         test.name
     ));
-    let program = analyze_sources(&root, &sources)?;
+    let program = analyze_sources(&root, &sources, bindings)?;
     Ok((root, project_name, program))
 }
 
@@ -694,6 +695,8 @@ fn install_packages(root: &Path) -> Result<(), String> {
             .map_err(|error| format!("could not create {}: {error}", directory.display()))?;
         let destination = directory.join("adamantium_packet.wasm");
         let temporary = directory.join("adamantium_packet.wasm.download");
+        let manifest_destination = directory.join("adamantium_packet.toml");
+        let manifest_temporary = directory.join("adamantium_packet.toml.download");
         let tag = format!("adamantium_packet_{}", package.version.replace('.', "_"));
         let url = format!(
             "{}/releases/download/{tag}/adamantium_packet.wasm",
@@ -706,41 +709,47 @@ fn install_packages(root: &Path) -> Result<(), String> {
                 "curl".into()
             }
         });
-        let status = Command::new(downloader)
-            .args([
-                "-fL",
-                "--proto",
-                "=https",
-                "--proto-redir",
-                "=https",
-                "--output",
-            ])
-            .arg(&temporary)
-            .arg(&url)
-            .status()
-            .map_err(|error| format!("could not download package '{}': {error}", package.name))?;
-        if !status.success() {
+        download_package_file(&downloader, &url, &temporary, package)?;
+        let manifest_url = format!(
+            "{}/releases/download/{tag}/adamantium_packet.toml",
+            package.source
+        );
+        if let Err(error) =
+            download_package_file(&downloader, &manifest_url, &manifest_temporary, package)
+        {
             let _ = fs::remove_file(&temporary);
-            return Err(format!(
-                "failed to download package '{}' version {} from {url}",
-                package.name, package.version
-            ));
+            return Err(error);
         }
         let bytes = fs::read(&temporary)
             .map_err(|error| format!("could not read downloaded package: {error}"))?;
         if !bytes.starts_with(b"\0asm\x01\0\0\0") {
             let _ = fs::remove_file(&temporary);
+            let _ = fs::remove_file(&manifest_temporary);
             return Err(format!(
                 "package '{}' did not contain a valid WebAssembly binary",
                 package.name
             ));
         }
-        if destination.exists() {
-            fs::remove_file(&destination)
-                .map_err(|error| format!("could not replace {}: {error}", destination.display()))?;
+        if let Err(error) = packages::validate_manifest(&manifest_temporary, &package.version) {
+            let _ = fs::remove_file(&temporary);
+            let _ = fs::remove_file(&manifest_temporary);
+            return Err(error);
+        }
+        for destination in [&destination, &manifest_destination] {
+            if destination.exists() {
+                fs::remove_file(destination).map_err(|error| {
+                    format!("could not replace {}: {error}", destination.display())
+                })?;
+            }
         }
         fs::rename(&temporary, &destination)
             .map_err(|error| format!("could not install {}: {error}", destination.display()))?;
+        fs::rename(&manifest_temporary, &manifest_destination).map_err(|error| {
+            format!(
+                "could not install {}: {error}",
+                manifest_destination.display()
+            )
+        })?;
         println!("Installed {} {}", package.name, package.version);
     }
     println!(
@@ -751,9 +760,38 @@ fn install_packages(root: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn download_package_file(
+    downloader: &std::ffi::OsStr,
+    url: &str,
+    destination: &Path,
+    package: &Package,
+) -> Result<(), String> {
+    let status = Command::new(downloader)
+        .args([
+            "-fL",
+            "--proto",
+            "=https",
+            "--proto-redir",
+            "=https",
+            "--output",
+        ])
+        .arg(destination)
+        .arg(url)
+        .status()
+        .map_err(|error| format!("could not download package '{}': {error}", package.name))?;
+    if !status.success() {
+        let _ = fs::remove_file(destination);
+        return Err(format!(
+            "failed to download package '{}' version {} from {url}",
+            package.name, package.version
+        ));
+    }
+    Ok(())
+}
+
 fn analyze(root: &Path) -> Result<(PathBuf, String, typed::Program), String> {
-    let (root, name, sources) = project_sources(root)?;
-    let statements = analyze_sources(&root, &sources)?;
+    let (root, name, sources, bindings) = project_sources(root)?;
+    let statements = analyze_sources(&root, &sources, bindings)?;
     Ok((root, name, statements))
 }
 
@@ -788,21 +826,40 @@ fn project_sources(root: &Path) -> Result<ProjectSources, String> {
         errors.push("project.toml: authors must be an array of strings".into());
     }
     let requirements = read_toml(&root.join("requirement.toml"))?;
-    if let Err(error) = packages(&requirements) {
-        errors.push(error);
-    }
+    let packages = match packages(&requirements) {
+        Ok(packages) => packages,
+        Err(error) => {
+            errors.push(error);
+            Vec::new()
+        }
+    };
     if !errors.is_empty() {
         return Err(diagnostics::multiple_errors(errors));
     }
-    let sources = load_modules(&root.join("code"))?;
-    Ok((root, name.expect("validated project name"), sources))
+    let mut sources = load_modules(&root.join("code"))?;
+    let bindings = packages::load_bindings(&root, &packages, &mut sources)?;
+    Ok((
+        root,
+        name.expect("validated project name"),
+        sources,
+        bindings,
+    ))
 }
 
-fn analyze_sources(root: &Path, sources: &[(String, String)]) -> Result<typed::Program, String> {
+fn analyze_sources(
+    root: &Path,
+    sources: &[(String, String)],
+    bindings: Vec<packages::Binding>,
+) -> Result<typed::Program, String> {
     let source_path = root.join("code/main.ad");
     let parsed =
         syntax::parse_modules(sources).map_err(|e| format!("{}:{e}", source_path.display()))?;
-    let statements = typed::check(&parsed).map_err(|e| format!("{}:{e}", source_path.display()))?;
+    let mut statements =
+        typed::check(&parsed).map_err(|e| format!("{}:{e}", source_path.display()))?;
+    statements.package_functions = bindings
+        .into_iter()
+        .map(|binding| (binding.canonical, binding.function))
+        .collect();
     for warning in diagnostics::warnings(&parsed) {
         eprintln!("{}:{warning}", source_path.display());
     }
@@ -887,10 +944,16 @@ fn link(target: &Path, name: &str, obj: &Path, runtime: &Path, exe: &Path) -> Re
         obj.as_os_str().into(),
         runtime.as_os_str().into(),
     ];
+    let auxiliary = extract_runtime_auxiliary_libraries(target)?;
     arguments.extend(
         include_str!(concat!(env!("OUT_DIR"), "/runtime-libraries.txt"))
             .split_whitespace()
-            .map(OsString::from),
+            .map(|library| {
+                auxiliary
+                    .iter()
+                    .find(|path| path.file_name().is_some_and(|name| name == library))
+                    .map_or_else(|| OsString::from(library), |path| path.as_os_str().into())
+            }),
     );
     arguments.push("kernel32.lib".into());
 
@@ -925,6 +988,35 @@ fn link(target: &Path, name: &str, obj: &Path, runtime: &Path, exe: &Path) -> Re
             .arg(format!("@{}", response.display())),
         "Microsoft linker through the Visual Studio x64 environment",
     )
+}
+
+fn extract_runtime_auxiliary_libraries(target: &Path) -> Result<Vec<PathBuf>, String> {
+    let bundle = include_bytes!(concat!(env!("OUT_DIR"), "/runtime-auxiliary-libraries.bin"));
+    let mut cursor = 0;
+    let mut paths = Vec::new();
+    while cursor < bundle.len() {
+        if bundle.len() - cursor < 12 {
+            return Err("embedded runtime library bundle is invalid".into());
+        }
+        let name_length =
+            u32::from_le_bytes(bundle[cursor..cursor + 4].try_into().unwrap()) as usize;
+        cursor += 4;
+        let data_length =
+            u64::from_le_bytes(bundle[cursor..cursor + 8].try_into().unwrap()) as usize;
+        cursor += 8;
+        if bundle.len() - cursor < name_length + data_length {
+            return Err("embedded runtime library bundle is invalid".into());
+        }
+        let name = std::str::from_utf8(&bundle[cursor..cursor + name_length])
+            .map_err(|_| "embedded runtime library name is invalid")?;
+        cursor += name_length;
+        let path = target.join(name);
+        fs::write(&path, &bundle[cursor..cursor + data_length])
+            .map_err(|error| format!("{}: {error}", path.display()))?;
+        cursor += data_length;
+        paths.push(path);
+    }
+    Ok(paths)
 }
 
 fn find_vcvars64() -> Option<PathBuf> {

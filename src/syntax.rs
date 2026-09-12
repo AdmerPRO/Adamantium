@@ -2074,6 +2074,33 @@ pub fn module_dependencies(source: &str) -> Result<Vec<String>, String> {
     Ok(dependencies)
 }
 
+pub fn package_dependencies(source: &str) -> Result<Vec<String>, String> {
+    let tokens = lex(source)?;
+    let mut packages = Vec::new();
+    let mut index = 0;
+    let mut depth = 0;
+    while index < tokens.len() {
+        match &tokens[index].0 {
+            Token::Symbol('{') => depth += 1,
+            Token::Symbol('}') => depth -= 1,
+            Token::Word(word) if word == "mod" && depth == 0 => {
+                let position = tokens[index].1;
+                let Some((Token::Word(name), _)) = tokens.get(index + 1) else {
+                    return Err(position.error("expected package name after 'mod'"));
+                };
+                if !matches!(tokens.get(index + 2), Some((Token::Symbol(';'), _))) {
+                    return Err(position.error("expected ';' after package name"));
+                }
+                packages.push(name.clone());
+                index += 2;
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+    Ok(packages)
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ExportKind {
     Function,
@@ -2161,7 +2188,7 @@ pub fn parse_modules(files: &[(String, String)]) -> Result<Program, String> {
             match &tokens[index].0 {
                 Token::Symbol('{') => depth += 1,
                 Token::Symbol('}') => depth -= 1,
-                Token::Word(keyword) if depth == 0 && keyword == "pack" => {
+                Token::Word(keyword) if depth == 0 && (keyword == "pack" || keyword == "mod") => {
                     while index < tokens.len() && tokens[index].0 != Token::Symbol(';') {
                         removed.insert(index);
                         index += 1;
@@ -2184,12 +2211,14 @@ pub fn parse_modules(files: &[(String, String)]) -> Result<Program, String> {
                         }
                         index += 1;
                     }
-                    if !matches!(tokens.get(index), Some((Token::Symbol(':'), _)))
-                        || !matches!(tokens.get(index + 1), Some((Token::Symbol('['), _)))
-                    {
-                        return Err(tokens[start].1.error("expected ':[' after module path"));
+                    if !matches!(tokens.get(index), Some((Token::Symbol(':'), _))) {
+                        return Err(tokens[start].1.error("expected ':' after module path"));
                     }
-                    index += 2;
+                    index += 1;
+                    let list = matches!(tokens.get(index), Some((Token::Symbol('['), _)));
+                    if list {
+                        index += 1;
+                    }
                     loop {
                         let Some((Token::Word(name), position)) = tokens.get(index) else {
                             return Err(tokens[start].1.error("expected imported symbol name"));
@@ -2215,6 +2244,9 @@ pub fn parse_modules(files: &[(String, String)]) -> Result<Program, String> {
                             )));
                         }
                         index += 1;
+                        if !list {
+                            break;
+                        }
                         if matches!(tokens.get(index), Some((Token::Symbol(']'), _))) {
                             index += 1;
                             break;

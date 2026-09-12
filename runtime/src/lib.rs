@@ -4,6 +4,10 @@ use std::cell::{Cell, RefCell};
 use std::ffi::{CStr, c_char};
 use std::io::Write;
 use types::{Type, Value};
+use wasmi::{Engine, Linker, Module, Store};
+use wasmi_wasi::{
+    WasiCtx, WasiCtxBuilder, add_to_linker, ambient_authority, wasi_common::pipe::WritePipe,
+};
 
 thread_local! {
     static TRY_DEPTH: Cell<usize> = const { Cell::new(0) };
@@ -279,6 +283,150 @@ pub unsafe extern "C" fn ad_print(value: *const Value, ty: u32, newline: u32) ->
         1
     } else {
         0
+    }
+}
+
+#[repr(C)]
+pub struct PackageCall {
+    wasm: Value,
+    command: Value,
+    arguments: [Value; 8],
+    types: [u32; 8],
+    count: u32,
+    result_type: u32,
+    filesystem: u32,
+    reserved: u32,
+    output: Value,
+}
+
+unsafe fn value_text(value: Value) -> Result<String, String> {
+    if value.lo == 0 && value.hi == 0 {
+        return Ok(String::new());
+    }
+    let bytes = unsafe { std::slice::from_raw_parts(value.lo as *const u8, value.hi as usize) };
+    std::str::from_utf8(bytes)
+        .map(str::to_owned)
+        .map_err(|error| format!("invalid UTF-8: {error}"))
+}
+
+fn package_result(bytes: &[u8], ty: Type) -> Result<Value, String> {
+    if ty == Type::None {
+        return Ok(Value::default());
+    }
+    if ty == Type::String {
+        let bytes = bytes.to_vec().into_boxed_slice();
+        let value = Value {
+            lo: bytes.as_ptr() as u64,
+            hi: bytes.len() as u64,
+        };
+        std::mem::forget(bytes);
+        return Ok(value);
+    }
+    let text = std::str::from_utf8(bytes)
+        .map_err(|error| format!("package returned non-UTF-8 output: {error}"))?
+        .trim();
+    if ty == Type::Bool {
+        return match text {
+            "true" => Ok(Value { lo: 1, hi: 0 }),
+            "false" => Ok(Value::default()),
+            _ => Err(format!("package returned invalid bool '{text}'")),
+        };
+    }
+    types::literal(text, ty)
+}
+
+/// # Safety
+/// `request` must point to an initialized, writable `PackageCall` and all
+/// contained string values must remain readable for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ad_package_call(request: *mut PackageCall) -> u32 {
+    let Some(request) = (unsafe { request.as_mut() }) else {
+        return 2;
+    };
+    let result = (|| -> Result<Value, String> {
+        if request.count as usize > request.arguments.len() {
+            return Err("package call has too many arguments".into());
+        }
+        if request.filesystem > 2 {
+            return Err("package call has an invalid filesystem permission".into());
+        }
+        let wasm = unsafe { value_text(request.wasm)? };
+        let command = unsafe { value_text(request.command)? };
+        let mut arguments = vec!["adamantium-packet".to_owned(), command];
+        for index in 0..request.count as usize {
+            let ty = Type::from_id(request.types[index]).ok_or("invalid package argument type")?;
+            let value = request.arguments[index];
+            arguments.push(if ty == Type::String {
+                unsafe { value_text(value)? }
+            } else {
+                types::display(value, ty)?
+            });
+        }
+
+        let stdout = WritePipe::new_in_memory();
+        let stderr = WritePipe::new_in_memory();
+        let mut builder = WasiCtxBuilder::new();
+        builder
+            .args(&arguments)
+            .map_err(|error| error.to_string())?
+            .stdout(Box::new(stdout.clone()))
+            .stderr(Box::new(stderr.clone()));
+        if request.filesystem != 0 {
+            let directory = wasmi_wasi::Dir::open_ambient_dir(
+                std::env::current_dir().map_err(|error| error.to_string())?,
+                ambient_authority(),
+            )
+            .map_err(|error| error.to_string())?;
+            builder
+                .preopened_dir(directory, ".")
+                .map_err(|error| error.to_string())?;
+        }
+        let engine = Engine::default();
+        let bytes = std::fs::read(&wasm).map_err(|error| error.to_string())?;
+        let module = Module::new(&engine, &bytes).map_err(|error| error.to_string())?;
+        let mut linker: Linker<WasiCtx> = Linker::new(&engine);
+        add_to_linker(&mut linker, |context| context).map_err(|error| error.to_string())?;
+        let mut store = Store::new(&engine, builder.build());
+        let execution = linker
+            .instantiate_and_start(&mut store, &module)
+            .and_then(|instance| {
+                instance
+                    .get_typed_func::<(), ()>(&store, "_start")?
+                    .call(&mut store, ())
+            });
+        if let Err(error) = execution {
+            if error.i32_exit_status() != Some(0) {
+                drop(store);
+                let stderr = stderr
+                    .try_into_inner()
+                    .map_err(|_| "could not read package stderr".to_owned())?
+                    .into_inner();
+                let stderr = String::from_utf8_lossy(&stderr).into_owned();
+                return Err(if stderr.trim().is_empty() {
+                    error.to_string()
+                } else {
+                    stderr
+                });
+            }
+        }
+        drop(store);
+        let stdout = stdout
+            .try_into_inner()
+            .map_err(|_| "could not read package stdout".to_owned())?
+            .into_inner();
+        let result_type =
+            Type::from_id(request.result_type).ok_or("invalid package result type")?;
+        package_result(&stdout, result_type)
+    })();
+    match result {
+        Ok(value) => {
+            request.output = value;
+            0
+        }
+        Err(error) => {
+            report_error(format!("Adamantium package error: {}", error.trim()));
+            2
+        }
     }
 }
 

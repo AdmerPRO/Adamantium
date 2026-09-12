@@ -132,16 +132,31 @@ Declare Adamantium WASM packages in `requirement.toml`:
 
 Install them with `adamantium install [PROJECT_DIRECTORY]`. Version `1.0.0`
 selects the GitHub release tag `adamantium_packet_1_0_0` and downloads its
-`adamantium_packet.wasm` asset into
-`packages/Math/1.0.0/adamantium_packet.wasm`. Sources can use any public GitHub
+`adamantium_packet.wasm` and `adamantium_packet.toml` assets into
+`packages/Math/1.0.0`. Sources can use any public GitHub
 repository. Packages outside the `AdmerPRO` and `AdamantiumORG` organizations
 are identified as community packages and are not controlled by Adamantium.
 Versions must use `MAJOR.MINOR.PATCH`, downloads must remain on HTTPS, and files
 are checked for a valid WebAssembly header. Set `ADAMANTIUM_CURL` only when a
 custom compatible downloader is required.
 
-Package installation is implemented; importing or executing functions from the
-downloaded WASM module is not implemented yet.
+Activate an installed package with `mod`, then import one function or a list:
+
+```adamantium
+mod Math;
+use Math:add;
+
+fun main() {
+    var result = add(2, 3);
+    print.newline(result);
+}
+```
+
+The package manifest declares its module name, functions, parameter and return
+types, command names, and filesystem permission. The generic WASI command
+runtime works for every package that implements this documented ABI; no
+package-specific compiler binding is required. `use Math:[add,subtract];` and
+qualified calls such as `Math:add(2, 3)` are also supported.
 
 ### Modules, pack, and use
 

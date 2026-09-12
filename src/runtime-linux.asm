@@ -15,6 +15,7 @@ extern ad_try_begin
 extern ad_try_end
 extern ad_has_error
 extern ad_is_trying
+extern ad_package_call
 
 section .text
 main:
@@ -121,5 +122,12 @@ ad_linux_has_error:
 ad_linux_is_trying:
     sub rsp, 8
     call ad_is_trying
+    add rsp, 8
+    ret
+
+ad_linux_package_call:
+    mov rdi, rcx
+    sub rsp, 8
+    call ad_package_call
     add rsp, 8
     ret
