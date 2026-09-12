@@ -1,7 +1,7 @@
-![CI](https://github.com/AdamantiumORG/Adamantium/actions/workflows/ci.yml/badge.svg?branch=main)
-![CLI Linux](https://github.com/AdamantiumORG/Adamantium/actions/workflows/cli-linux.yml/badge.svg?branch=main)
-![CLI Windows](https://github.com/AdamantiumORG/Adamantium/actions/workflows/cli-windows.yml/badge.svg?branch=main)
-![Proof HTML](https://github.com/AdamantiumORG/Adamantium/actions/workflows/proof-html.yml/badge.svg?branch=main)
+![CI](https://github.com/AdamantiumORG/Adamantium/actions/workflows/ci.yml/badge.svg?branch=master)
+![CLI Linux](https://github.com/AdamantiumORG/Adamantium/actions/workflows/cli-linux.yml/badge.svg?branch=master)
+![CLI Windows](https://github.com/AdamantiumORG/Adamantium/actions/workflows/cli-windows.yml/badge.svg?branch=master)
+![Proof HTML](https://github.com/AdamantiumORG/Adamantium/actions/workflows/proof-html.yml/badge.svg?branch=master)
 [![License: GPL](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://opensource.org/licenses/gpl-3-0)
 
 # Adamantium Compiler
