@@ -53,24 +53,6 @@ jobs:
           cargo install --path . --locked --force --root $installRoot
           Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $installRoot 'bin')
 
-      - name: Test CLI commands
+      - name: Test installed CLI
         shell: pwsh
-        run: |
-          adamantium --version
-          if ($LASTEXITCODE -ne 0) { throw 'adamantium --version failed.' }
-
-          adamantium --help
-          if ($LASTEXITCODE -ne 0) { throw 'adamantium --help failed.' }
-
-          adamantium build example-project
-          if ($LASTEXITCODE -ne 0) { throw 'adamantium build failed.' }
-
-          adamantium run example-project
-          if ($LASTEXITCODE -ne 0) { throw 'adamantium run failed.' }
-
-          $newProject = Join-Path $env:RUNNER_TEMP 'CreatedByAdamantium'
-          adamantium new $newProject
-          if ($LASTEXITCODE -ne 0) { throw 'adamantium new failed.' }
-          if (-not (Test-Path (Join-Path $newProject 'code/main.ad'))) {
-            throw 'adamantium new did not create code/main.ad.'
-          }
+        run: ./scripts/test-cli-windows.ps1

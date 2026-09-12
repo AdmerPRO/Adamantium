@@ -848,6 +848,10 @@ installs NASM, configures MSVC, and runs the native EXE regressions. Linux CI
 installs NASM and runs a generated ELF64 executable. macOS runs compiler-only
 checks until its native backend is implemented.
 
+Separate Windows and Linux CLI workflows install `adamantium` with
+`cargo install`, create a fresh project, and test `check`, `build`, `run`,
+`test list`, `test run`, `clean`, and `clear` using the installed command.
+
 See [`docs/TARGETS.md`](docs/TARGETS.md) for supported targets and the future
 ARM64 contract.
 

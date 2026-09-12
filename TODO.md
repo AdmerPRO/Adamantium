@@ -1244,7 +1244,7 @@ Create the official standard library.
 * [x] Run static analysis
 * [x] Check spelling with Typos on all three CI runners
 * [x] Build release binaries
-* [x] Test installed CLI on Windows x86-64 - help, version, build and run
+* [x] Test installed CLI on Windows x86-64 - project creation, check, EXE build, run, tests, clean and clear
 * [x] Test installed CLI on Linux x86-64 - project creation, check, ELF build, run, tests, clean and clear
 * [x] Test Windows - compiler checks and native EXE regression tests configured
 * [x] Test Linux - compiler tests and native generated executable test
