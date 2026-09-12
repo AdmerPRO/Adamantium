@@ -1,7 +1,8 @@
-![CI](https://github.com/AdamantiumORG/demo-repository/actions/workflows/ci.yml/badge.svg)
-![CLI Windows](https://github.com/AdamantiumORG/demo-repository/actions/workflows/cli-windows.yml/badge.svg)
-![CLI Linux](https://github.com/AdamantiumORG/demo-repository/actions/workflows/cli-linux.yml/badge.svg)
-![Portable Windows](https://github.com/AdamantiumORG/demo-repository/actions/workflows/portable-windows.yml/badge.svg)
+![CI](https://github.com/AdamantiumORG/Adamantium/actions/workflows/ci.yml/badge.svg)
+![CLI Linux](https://github.com/AdamantiumORG/Adamantium/actions/workflows/cli-linux.yml/badge.svg)
+![CLI Windows](https://github.com/AdamantiumORG/Adamantium/actions/workflows/cli-windows.yml/badge.svg)
+![Portable Windows](https://github.com/AdamantiumORG/Adamantium/actions/workflows/portable-windows.yml/badge.svg)
+![Proof HTML](https://github.com/AdamantiumORG/Adamantium/actions/workflows/proof-html.yml/badge.svg)
 
 # Adamantium Compiler
 
