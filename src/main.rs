@@ -609,20 +609,16 @@ fn packages(table: &toml::Table) -> Result<Vec<Package>, String> {
         let version = value.as_str().ok_or_else(|| {
             format!("requirement.toml: package '{source}' version must be a string")
         })?;
-        let name = source
-            .strip_prefix("https://github.com/AdmerPRO/")
-            .filter(|name| {
-                !name.is_empty()
-                    && !name.contains('/')
-                    && name
-                        .bytes()
-                        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
-            })
+        let path = source
+            .strip_prefix("https://github.com/")
+            .and_then(|path| path.split_once('/'))
+            .filter(|(owner, name)| valid_github_owner(owner) && valid_github_repository(name))
             .ok_or_else(|| {
                 format!(
-                    "requirement.toml: package source '{source}' must be an https://github.com/AdmerPRO/<name> URL"
+                    "requirement.toml: package source '{source}' must be an https://github.com/<owner>/<name> URL"
                 )
             })?;
+        let name = path.1;
         let parts = version.split('.').collect::<Vec<_>>();
         if parts.len() != 3
             || parts
@@ -643,6 +639,38 @@ fn packages(table: &toml::Table) -> Result<Vec<Package>, String> {
     Ok(result)
 }
 
+fn valid_github_owner(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+}
+
+fn valid_github_repository(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+}
+
+fn is_official_package_source(source: &str) -> bool {
+    source
+        .strip_prefix("https://github.com/")
+        .and_then(|path| path.split_once('/'))
+        .is_some_and(|(owner, _)| {
+            owner.eq_ignore_ascii_case("AdmerPRO") || owner.eq_ignore_ascii_case("AdamantiumORG")
+        })
+}
+
+fn community_package_warning(package: &Package) -> Option<String> {
+    (!is_official_package_source(&package.source)).then(|| {
+        format!(
+            "warning: package '{}' is a community package and is not controlled by Adamantium",
+            package.name
+        )
+    })
+}
+
 fn install_packages(root: &Path) -> Result<(), String> {
     let requested_root = root;
     let root = requested_root
@@ -655,6 +683,9 @@ fn install_packages(root: &Path) -> Result<(), String> {
         return Ok(());
     }
     for package in &packages {
+        if let Some(warning) = community_package_warning(package) {
+            eprintln!("{warning}");
+        }
         let directory = root
             .join("packages")
             .join(&package.name)
@@ -962,10 +993,10 @@ mod package_tests {
     use super::*;
 
     #[test]
-    fn parses_admerpro_wasm_packages_and_versions() {
+    fn parses_github_wasm_packages_and_versions() {
         let table = r#"[packages]
 "https://github.com/AdmerPRO/Math" = "1.2.3"
-"https://github.com/AdmerPRO/text-tools" = "0.4.0"
+"https://github.com/community/text-tools" = "0.4.0"
 "#
         .parse::<toml::Table>()
         .unwrap();
@@ -979,7 +1010,7 @@ mod package_tests {
                 },
                 Package {
                     name: "text-tools".into(),
-                    source: "https://github.com/AdmerPRO/text-tools".into(),
+                    source: "https://github.com/community/text-tools".into(),
                     version: "0.4.0".into(),
                 },
             ]
@@ -987,9 +1018,45 @@ mod package_tests {
     }
 
     #[test]
-    fn rejects_untrusted_package_sources_and_invalid_versions() {
+    fn identifies_official_package_owners() {
+        assert!(is_official_package_source(
+            "https://github.com/AdmerPRO/Math"
+        ));
+        assert!(is_official_package_source(
+            "https://github.com/AdamantiumORG/Math"
+        ));
+        assert!(!is_official_package_source(
+            "https://github.com/community/Math"
+        ));
+    }
+
+    #[test]
+    fn warns_about_community_packages() {
+        let community = Package {
+            name: "some.package".into(),
+            source: "https://github.com/community/some.package".into(),
+            version: "1.0.0".into(),
+        };
+        assert_eq!(
+            community_package_warning(&community).as_deref(),
+            Some(
+                "warning: package 'some.package' is a community package and is not controlled by Adamantium"
+            )
+        );
+
+        let official = Package {
+            name: "Math".into(),
+            source: "https://github.com/AdamantiumORG/Math".into(),
+            version: "1.0.0".into(),
+        };
+        assert_eq!(community_package_warning(&official), None);
+    }
+
+    #[test]
+    fn rejects_invalid_package_sources_and_versions() {
         for manifest in [
-            "[packages]\n\"https://github.com/Other/Name\"=\"1.0.0\"",
+            "[packages]\n\"https://gitlab.com/Other/Name\"=\"1.0.0\"",
+            "[packages]\n\"https://github.com/Owner/Name/extra\"=\"1.0.0\"",
             "[packages]\n\"https://github.com/AdmerPRO/../Name\"=\"1.0.0\"",
             "[packages]\n\"https://github.com/AdmerPRO/Name\"=\"latest\"",
         ] {

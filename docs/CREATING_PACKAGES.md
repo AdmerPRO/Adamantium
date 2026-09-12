@@ -26,17 +26,24 @@ exports will become usable only after the package runtime and ABI are added.
 A package repository must currently use this URL form:
 
 ```text
-https://github.com/AdmerPRO/PackageName
+https://github.com/Owner/PackageName
 ```
 
-The repository name:
+The owner and repository names:
 
-- must be directly inside the `AdmerPRO` GitHub organization;
-- must contain only ASCII letters, digits, `-`, or `_`;
-- cannot contain another `/` path component.
+- must use GitHub-compatible ASCII names;
+- allow letters, digits, and `-` in the owner name;
+- also allow `_` and `.` in the repository name;
+- must form exactly two path components after `github.com`.
 
 Packages should be public because the installer currently sends no GitHub
 authentication token.
+
+Packages owned by `AdmerPRO` or `AdamantiumORG` are treated as official
+packages. A package from any other GitHub owner can still be installed, but the
+CLI prints a warning that it is a community package and is not controlled by
+Adamantium. This warning describes the package's origin and does not block the
+installation.
 
 Every published version needs:
 
@@ -48,7 +55,7 @@ Every published version needs:
 For version `1.4.2`, the resulting download URL is:
 
 ```text
-https://github.com/AdmerPRO/PackageName/releases/download/adamantium_packet_1_4_2/adamantium_packet.wasm
+https://github.com/Owner/PackageName/releases/download/adamantium_packet_1_4_2/adamantium_packet.wasm
 ```
 
 The names are case-sensitive. Do not publish the asset under the Cargo crate
@@ -246,7 +253,7 @@ Add the repository URL and exact version to the project's `requirement.toml`:
 
 ```toml
 [packages]
-"https://github.com/AdmerPRO/PackageName" = "1.0.0"
+"https://github.com/Owner/PackageName" = "1.0.0"
 ```
 
 Multiple packages belong in the same table:
@@ -254,8 +261,12 @@ Multiple packages belong in the same table:
 ```toml
 [packages]
 "https://github.com/AdmerPRO/Math" = "1.0.0"
-"https://github.com/AdmerPRO/TextTools" = "2.3.1"
+"https://github.com/community/TextTools" = "2.3.1"
 ```
+
+Installing this example does not warn about `AdmerPRO/Math`. It warns that
+`community/TextTools` is a community package and is not controlled by
+Adamantium.
 
 Only the `[packages]` top-level table is currently supported. Versions must be
 quoted strings with exactly three numeric components. Version ranges, names
@@ -334,10 +345,10 @@ new version so projects continue to resolve reproducibly once locking is added.
 
 ### Package source is rejected
 
-Use an exact URL in the `AdmerPRO` organization:
+Use an exact HTTPS GitHub repository URL:
 
 ```text
-https://github.com/AdmerPRO/PackageName
+https://github.com/Owner/PackageName
 ```
 
 Remove trailing slashes, `.git`, subdirectories, query strings, and fragments.
@@ -347,14 +358,14 @@ Remove trailing slashes, `.git`, subdirectories, query strings, and fragments.
 Use a quoted `MAJOR.MINOR.PATCH` value containing digits only:
 
 ```toml
-"https://github.com/AdmerPRO/PackageName" = "1.0.0"
+"https://github.com/Owner/PackageName" = "1.0.0"
 ```
 
 ### Download returns HTTP 404
 
 Check all three release identifiers:
 
-- repository: `AdmerPRO/PackageName`;
+- repository: `Owner/PackageName`;
 - tag for `1.0.0`: `adamantium_packet_1_0_0`;
 - asset: `adamantium_packet.wasm`.
 

@@ -1010,7 +1010,7 @@ assert(value, "message");
 
 * [ ] Design package format
 * [x] Implement `requirement.toml` package declarations
-* [x] Implement dependency resolution - AdmerPRO GitHub release URL and version tag mapping
+* [x] Implement dependency resolution - GitHub release URL and version tag mapping
 * [x] Implement dependency installation - download `adamantium_packet.wasm`
 * [x] Implement dependency versions - `MAJOR.MINOR.PATCH` maps to `adamantium_packet_MAJOR_MINOR_PATCH`
 * [ ] Implement dependency locking

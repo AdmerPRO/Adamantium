@@ -133,11 +133,12 @@ Declare Adamantium WASM packages in `requirement.toml`:
 Install them with `adamantium install [PROJECT_DIRECTORY]`. Version `1.0.0`
 selects the GitHub release tag `adamantium_packet_1_0_0` and downloads its
 `adamantium_packet.wasm` asset into
-`packages/Math/1.0.0/adamantium_packet.wasm`. Sources are currently restricted
-to HTTPS repositories in the `AdmerPRO` GitHub organization. Versions must use
-`MAJOR.MINOR.PATCH`, downloads must remain on HTTPS, and files are checked for a
-valid WebAssembly header. Set `ADAMANTIUM_CURL` only when a custom compatible
-downloader is required.
+`packages/Math/1.0.0/adamantium_packet.wasm`. Sources can use any public GitHub
+repository. Packages outside the `AdmerPRO` and `AdamantiumORG` organizations
+are identified as community packages and are not controlled by Adamantium.
+Versions must use `MAJOR.MINOR.PATCH`, downloads must remain on HTTPS, and files
+are checked for a valid WebAssembly header. Set `ADAMANTIUM_CURL` only when a
+custom compatible downloader is required.
 
 Package installation is implemented; importing or executing functions from the
 downloaded WASM module is not implemented yet.
