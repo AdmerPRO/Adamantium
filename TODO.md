@@ -1430,3 +1430,637 @@ The recommended implementation order is:
 34. [ ] VS Code support
 35. [x] CI/CD - push and pull-request validation workflows
 36. [ ] Stable release
+
+# 59. Sequential Development Roadmap
+
+This section defines the **required implementation order for the next stages of Adamantium**.
+
+Items in this section should be completed **in order** unless a task is explicitly blocked by another task.
+
+The goal of this roadmap is to stabilize the current language and compiler before introducing large new features such as async/await.
+
+---
+
+## Phase 1 - Finish the Current Core
+
+### 1. Complete nested lexical scopes
+
+* [ ] Replace function-only variable scope with nested lexical block scopes
+* [ ] Create a scope for every `{ ... }` block where required
+* [ ] Allow variables to exist only inside their defining scope
+* [ ] Allow child scopes to access variables from parent scopes
+* [ ] Prevent parent scopes from accessing variables declared in child scopes
+* [ ] Define shadowing rules for nested scopes
+* [ ] Validate shadowing behavior for variables, functions, classes, enums and imports
+* [ ] Add compiler diagnostics for invalid scope access
+* [ ] Add parser/type-checker/code-generation tests for nested scopes
+
+### 2. Complete visibility rules
+
+* [ ] Restrict `use` imports to public symbols only
+* [ ] Validate public/private access consistently across all symbol types
+* [ ] Validate public/private access for functions
+* [ ] Validate public/private access for classes
+* [ ] Validate public/private access for enums
+* [ ] Validate public/private access for class members
+* [ ] Add regression tests for private symbol access
+
+### 3. Complete exhaustive `match`
+
+* [ ] Detect non-exhaustive enum matches
+* [ ] Detect missing enum variants
+* [ ] Treat `_` as an exhaustive wildcard
+* [ ] Detect unreachable branches after exhaustive patterns
+* [ ] Produce diagnostics listing missing patterns
+* [ ] Add exhaustive-match tests
+* [ ] Document `match` exhaustiveness rules
+
+### 4. Complete explicit program exit
+
+* [ ] Implement `exit()`
+* [ ] Implement `exit(code = <integer>)`
+* [ ] Validate exit-code types
+* [ ] Validate exit-code ranges
+* [ ] Return explicit exit codes to the operating system
+* [ ] Add runtime tests for explicit exit codes
+
+---
+
+# Phase 2 - Stabilize Aliases and Memory Safety
+
+### 5. Finalize the alias model
+
+* [ ] Define the complete alias data model
+* [ ] Define alias parent/root semantics
+* [ ] Define alias lifetime semantics
+* [ ] Define synchronization semantics
+* [ ] Define disconnection semantics
+* [ ] Define detachment semantics
+* [ ] Define reattachment semantics
+* [ ] Define behavior when an aliased variable is removed
+* [ ] Define behavior when an alias is redirected
+* [ ] Document all alias guarantees
+
+### 6. Implement the remaining alias API
+
+* [ ] Implement `get_parent()`
+* [ ] Implement `get_root()`
+* [ ] Implement `is_alias()`
+* [ ] Implement `is_synced()`
+* [ ] Implement `alias_of()`
+* [ ] Implement `alias_count()`
+* [ ] Implement `desync()`
+* [ ] Implement `change_only()`
+* [ ] Implement `sync()`
+* [ ] Implement `detach()`
+* [ ] Implement `reattach()`
+* [ ] Define and implement `changename()`
+
+### 7. Complete memory-safety testing
+
+* [ ] Add alias lifetime tests
+* [ ] Add offset lifetime tests
+* [ ] Add removed-variable tests
+* [ ] Add invalid dereference tests
+* [ ] Add escaped-offset tests
+* [ ] Add class lifecycle safety tests
+* [ ] Add nested-scope memory-safety tests
+* [ ] Add regression tests for every discovered memory-safety bug
+
+---
+
+# Phase 3 - Runtime and Data Structures
+
+### 8. Complete the List runtime
+
+* [ ] Define the runtime representation of `List`
+* [ ] Implement list allocation
+* [ ] Implement list element storage
+* [ ] Implement list indexing
+* [ ] Implement list element assignment
+* [ ] Implement list copying
+* [ ] Implement nested lists
+* [ ] Implement list iteration
+* [ ] Implement list bounds checking
+* [ ] Report invalid list indexes as runtime errors
+* [ ] Add list runtime tests
+* [ ] Generate native list operations through the NASM backend
+
+### 9. Complete string operations
+
+* [ ] Define string runtime semantics
+* [ ] Implement string length
+* [ ] Implement string comparison
+* [ ] Implement string concatenation
+* [ ] Implement string indexing rules
+* [ ] Define UTF-8 behavior
+* [ ] Add string runtime tests
+* [ ] Add string code-generation tests
+
+### 10. Complete runtime error handling
+
+* [ ] Define runtime error representation
+* [ ] Separate recoverable runtime errors from panics
+* [ ] Integrate runtime errors with `try`
+* [ ] Add structured runtime error information
+* [ ] Preserve source locations where possible
+* [ ] Add runtime error tests
+
+---
+
+# Phase 4 - Compiler Architecture Cleanup
+
+### 11. Refactor the code generator
+
+* [ ] Split `codegen.rs` into focused modules
+* [ ] Separate expression generation
+* [ ] Separate statement generation
+* [ ] Separate function generation
+* [ ] Separate class generation
+* [ ] Separate list generation
+* [ ] Separate control-flow generation
+* [ ] Separate operator generation
+* [ ] Separate runtime-call generation
+* [ ] Keep generated assembly behavior unchanged during the refactor
+* [ ] Run the complete test suite after every refactor stage
+
+### 12. Refactor the syntax/compiler frontend
+
+* [ ] Separate lexer implementation
+* [ ] Separate token definitions
+* [ ] Separate parser implementation
+* [ ] Separate AST definitions
+* [ ] Separate parser diagnostics
+* [ ] Keep the public compiler behavior unchanged
+* [ ] Add regression tests for the refactored frontend
+
+### 13. Define compiler phase boundaries
+
+* [ ] Clearly define lexer output
+* [ ] Clearly define parser output
+* [ ] Clearly define AST invariants
+* [ ] Clearly define name-resolution output
+* [ ] Clearly define type-checker output
+* [ ] Clearly define semantic-analysis output
+* [ ] Clearly define code-generation input
+* [ ] Document compiler phase responsibilities
+
+---
+
+# Phase 5 - Testing Infrastructure
+
+### 14. Create a complete language regression suite
+
+* [ ] Create `tests/valid/`
+* [ ] Create `tests/invalid/`
+* [ ] Add variable tests
+* [ ] Add type-system tests
+* [ ] Add function tests
+* [ ] Add class tests
+* [ ] Add enum tests
+* [ ] Add list tests
+* [ ] Add generic tests
+* [ ] Add trait tests
+* [ ] Add module tests
+* [ ] Add import tests
+* [ ] Add alias tests
+* [ ] Add memory-safety tests
+* [ ] Add control-flow tests
+* [ ] Add error-handling tests
+
+### 15. Add compile-fail tests
+
+* [ ] Store expected compiler errors for invalid programs
+* [ ] Verify error codes
+* [ ] Verify source locations
+* [ ] Verify important diagnostic text
+* [ ] Verify suggestions where applicable
+* [ ] Ensure diagnostics do not regress silently
+
+### 16. Complete parallel test execution
+
+* [ ] Implement `Parallel`
+* [ ] Implement `Parallel[n]`
+* [ ] Detect available CPU parallelism
+* [ ] Limit concurrent tests
+* [ ] Implement `StopOnFailed`
+* [ ] Implement `StopOnFailed:DontStopStarted`
+* [ ] Wait for already-started tests
+* [ ] Report all completed tests
+* [ ] Add test-directive validation
+
+### 17. Implement assertions
+
+* [ ] Implement `assert(value)`
+* [ ] Implement `assert(value, message)`
+* [ ] Show source location on assertion failure
+* [ ] Show expected and actual values where possible
+* [ ] Integrate assertions with the test runner
+* [ ] Add assertion tests
+
+---
+
+# Phase 6 - Package System
+
+### 18. Finish package installation
+
+* [ ] Define the complete package format
+* [ ] Define package metadata
+* [ ] Define package version semantics
+* [ ] Implement package caching
+* [ ] Implement dependency locking
+* [ ] Implement dependency graph resolution
+* [ ] Detect dependency cycles
+* [ ] Validate package versions
+* [ ] Validate package metadata
+
+### 19. Implement package security
+
+* [ ] Validate package sources
+* [ ] Validate package contents
+* [ ] Prevent malicious package metadata
+* [ ] Prevent unsafe extraction paths
+* [ ] Prevent path traversal
+* [ ] Validate downloaded package integrity
+* [ ] Add package-security tests
+
+### 20. Implement WASM package loading
+
+* [ ] Define the Adamantium WASM package ABI
+* [ ] Implement WASM module loading
+* [ ] Validate WASM modules before execution
+* [ ] Implement package initialization
+* [ ] Implement exported function discovery
+* [ ] Implement Adamantium-to-WASM function calls
+* [ ] Implement WASM-to-Adamantium value conversion
+* [ ] Define supported WASM value types
+* [ ] Define package error propagation
+* [ ] Add WASM package integration tests
+
+### 21. Implement package publishing
+
+* [ ] Define package publishing format
+* [ ] Implement package metadata generation
+* [ ] Implement package release generation
+* [ ] Implement package checksums
+* [ ] Implement GitHub Release publishing
+* [ ] Document package publishing
+
+---
+
+# Phase 7 - Official Libraries
+
+### 22. Complete `AdamantiumFiles`
+
+* [ ] Implement file opening
+* [ ] Implement file reading
+* [ ] Implement file writing
+* [ ] Implement file appending
+* [ ] Implement file creation
+* [ ] Implement file deletion
+* [ ] Implement file existence checks
+* [ ] Implement directory creation
+* [ ] Implement directory deletion
+* [ ] Implement directory existence checks
+* [ ] Implement directory listing
+* [ ] Implement file metadata
+* [ ] Implement safe file errors
+* [ ] Define cross-platform behavior
+* [ ] Add documentation
+* [ ] Add tests
+
+### 23. Complete `AdamantiumJson`
+
+* [ ] Implement JSON parsing
+* [ ] Implement JSON serialization
+* [ ] Implement JSON objects
+* [ ] Implement JSON arrays
+* [ ] Implement JSON strings
+* [ ] Implement JSON numbers
+* [ ] Implement JSON booleans
+* [ ] Implement JSON `null`
+* [ ] Implement JSON type checking
+* [ ] Implement JSON file loading
+* [ ] Implement JSON file saving
+* [ ] Implement malformed JSON errors
+* [ ] Add documentation
+* [ ] Add tests
+
+### 24. Create the core standard library
+
+* [ ] Create the official standard-library repository
+* [ ] Define standard-library module structure
+* [ ] Implement string utilities
+* [ ] Implement math utilities
+* [ ] Implement collections
+* [ ] Implement date/time
+* [ ] Implement random numbers
+* [ ] Implement environment variables
+* [ ] Implement process management
+* [ ] Implement networking
+* [ ] Implement error utilities
+* [ ] Document the standard library
+* [ ] Add standard-library tests
+
+---
+
+# Phase 8 - Professional Mode
+
+### 25. Implement Professional Mode
+
+* [ ] Implement `professional = true`
+* [ ] Require explicit mutability declarations
+* [ ] Require explicit concrete types
+* [ ] Reject implicit declarations where required
+* [ ] Reject generic `int` where an exact integer type is required
+* [ ] Validate all Professional Mode restrictions during semantic analysis
+* [ ] Improve Professional Mode diagnostics
+* [ ] Add Professional Mode tests
+* [ ] Document Professional Mode
+
+---
+
+# Phase 9 - Compiler Optimization
+
+### 26. Implement safe optimization passes
+
+* [ ] Implement constant folding
+* [ ] Implement constant propagation
+* [ ] Implement dead-code elimination
+* [ ] Implement dead-function elimination
+* [ ] Implement expression simplification
+* [ ] Optimize local variables
+* [ ] Optimize function calls
+* [ ] Optimize generated assembly
+* [ ] Verify every optimization preserves program behavior
+* [ ] Add optimization regression tests
+
+### 27. Add optimization levels
+
+* [ ] Define `-O0`
+* [ ] Define `-O1`
+* [ ] Define `-O2`
+* [ ] Define optimization defaults
+* [ ] Add optimization CLI options
+* [ ] Add optimization tests
+* [ ] Benchmark compiler performance
+* [ ] Benchmark generated program performance
+
+---
+
+# Phase 10 - Tooling and Developer Experience
+
+### 28. Implement `adamantium fmt`
+
+* [ ] Define formatting rules
+* [ ] Implement formatter
+* [ ] Make formatting deterministic
+* [ ] Preserve comments
+* [ ] Format nested structures correctly
+* [ ] Add formatter tests
+* [ ] Add `adamantium fmt`
+
+### 29. Implement `adamantium doctor`
+
+* [ ] Detect missing compiler dependencies
+* [ ] Detect missing NASM
+* [ ] Detect missing linker dependencies
+* [ ] Detect invalid project configuration
+* [ ] Detect invalid package configuration
+* [ ] Provide actionable diagnostics
+* [ ] Add `adamantium doctor`
+
+### 30. Implement VS Code support
+
+* [ ] Create syntax-highlighting extension
+* [ ] Add Adamantium file recognition
+* [ ] Add keywords
+* [ ] Add types
+* [ ] Add comments
+* [ ] Add strings
+* [ ] Add diagnostics
+* [ ] Add snippets
+* [ ] Publish development extension
+
+### 31. Implement Language Server Protocol
+
+* [ ] Create Adamantium language server
+* [ ] Implement diagnostics
+* [ ] Implement autocomplete
+* [ ] Implement go-to-definition
+* [ ] Implement find references
+* [ ] Implement symbol information
+* [ ] Implement rename symbol
+* [ ] Implement document formatting
+* [ ] Integrate with VS Code
+
+---
+
+# Phase 11 - Cross-Platform and Release Infrastructure
+
+### 32. Remove the Windows linker dependency
+
+* [ ] Bundle a supported linker
+* [ ] Bundle required Windows libraries where legally and technically appropriate
+* [ ] Remove the remaining Visual Studio requirement
+* [ ] Test clean Windows machines
+* [ ] Update portable distribution
+* [ ] Add Windows linker regression tests
+
+### 33. Complete cross-platform behavior
+
+* [ ] Define cross-platform standard-library behavior
+* [ ] Define cross-platform file handling
+* [ ] Define cross-platform process handling
+* [ ] Add macOS compiler support
+* [ ] Add macOS backend support
+* [ ] Add macOS CI
+* [ ] Add cross-platform integration tests
+
+### 34. Complete release infrastructure
+
+* [ ] Define semantic versioning rules
+* [ ] Define compatibility rules
+* [ ] Define development releases
+* [ ] Define nightly releases
+* [ ] Define stable releases
+* [ ] Generate changelogs
+* [ ] Generate release notes
+* [ ] Publish release binaries
+* [ ] Publish package releases
+* [ ] Create Windows installer
+
+---
+
+# Phase 12 - Language Specification Freeze
+
+### 35. Freeze the core language
+
+* [ ] Freeze syntax
+* [ ] Freeze keywords
+* [ ] Freeze type system
+* [ ] Freeze type inference
+* [ ] Freeze conversion rules
+* [ ] Freeze function semantics
+* [ ] Freeze class semantics
+* [ ] Freeze enum semantics
+* [ ] Freeze generic semantics
+* [ ] Freeze trait semantics
+* [ ] Freeze memory model
+* [ ] Freeze alias semantics
+* [ ] Freeze offset semantics
+* [ ] Freeze module system
+* [ ] Freeze package system
+* [ ] Freeze error handling
+* [ ] Freeze test system
+
+### 36. Write the complete specifications
+
+* [ ] Write the complete Adamantium Language Specification
+* [ ] Write the compiler specification
+* [ ] Write the memory-safety specification
+* [ ] Write the package specification
+* [ ] Write the WASM ABI specification
+* [ ] Write the standard-library specification
+* [ ] Write the CLI specification
+
+---
+
+# Phase 13 - Async
+
+Async should be implemented **only after the core language, runtime, package system and language specification are stable**.
+
+### 37. Design async
+
+* [ ] Define `async` semantics
+* [ ] Define `await` semantics
+* [ ] Define task semantics
+* [ ] Define task ownership
+* [ ] Define task lifetime
+* [ ] Define cancellation semantics
+* [ ] Define async error propagation
+* [ ] Define async memory-safety rules
+* [ ] Define executor semantics
+
+### 38. Implement `adamantium-async`
+
+* [ ] Create `adamantium-async`
+* [ ] Implement async runtime
+* [ ] Implement executor
+* [ ] Implement tasks
+* [ ] Implement task spawning
+* [ ] Implement task joining
+* [ ] Implement cancellation
+* [ ] Implement async errors
+* [ ] Add async tests
+* [ ] Add async documentation
+
+### 39. Integrate async with the compiler
+
+* [ ] Implement `async`
+* [ ] Implement `await`
+* [ ] Implement async functions
+* [ ] Implement async return values
+* [ ] Generate async state machines
+* [ ] Integrate async with memory safety
+* [ ] Integrate async with classes
+* [ ] Integrate async with aliases
+* [ ] Integrate async with packages
+* [ ] Add async code-generation tests
+
+---
+
+# Phase 14 - Security Audit
+
+### 40. Perform a complete security review
+
+* [ ] Audit package installation
+* [ ] Audit package extraction
+* [ ] Audit path handling
+* [ ] Audit WASM execution
+* [ ] Audit runtime memory handling
+* [ ] Audit generated assembly
+* [ ] Audit compiler input handling
+* [ ] Audit dependency handling
+* [ ] Add security regression tests
+* [ ] Fix all critical security issues
+
+---
+
+# Phase 15 - Adamantium 1.0
+
+### 41. Prepare the stable release
+
+* [ ] Complete core language
+* [ ] Complete memory-safety system
+* [ ] Complete runtime
+* [ ] Complete standard library
+* [ ] Complete package manager
+* [ ] Complete WASM package system
+* [ ] Complete testing system
+* [ ] Complete CLI
+* [ ] Complete documentation
+* [ ] Complete VS Code support
+* [ ] Complete CI/CD
+* [ ] Complete supported platform builds
+* [ ] Complete security audit
+* [ ] Complete performance benchmarks
+* [ ] Fix all critical bugs
+* [ ] Freeze the 1.0 language specification
+* [ ] Tag `v1.0.0`
+* [ ] Publish Adamantium 1.0
+* [ ] Publish official documentation
+* [ ] Publish official packages
+* [ ] Publish release notes
+* [ ] Announce the stable release
+
+---
+
+# Current Execution Order
+
+The following list is the **single source of truth for what should be worked on next**.
+
+Do not skip ahead to later phases unless a current task is blocked.
+
+1. [ ] Complete nested lexical scopes
+2. [ ] Complete public/private import enforcement
+3. [ ] Implement exhaustive `match`
+4. [ ] Implement explicit `exit(code = ...)`
+5. [ ] Finalize alias semantics
+6. [ ] Implement remaining alias APIs
+7. [ ] Complete memory-safety regression tests
+8. [ ] Complete the List runtime
+9. [ ] Complete string operations
+10. [ ] Complete runtime error handling
+11. [ ] Refactor `codegen.rs`
+12. [ ] Refactor the compiler frontend
+13. [ ] Define compiler phase boundaries
+14. [ ] Create the complete language regression suite
+15. [ ] Create compile-fail tests
+16. [ ] Complete parallel test execution
+17. [ ] Implement assertions
+18. [ ] Complete package installation
+19. [ ] Implement package security
+20. [ ] Implement WASM package loading
+21. [ ] Implement package publishing
+22. [ ] Complete `AdamantiumFiles`
+23. [ ] Complete `AdamantiumJson`
+24. [ ] Create the core standard library
+25. [ ] Implement Professional Mode
+26. [ ] Implement compiler optimizations
+27. [ ] Add optimization levels
+28. [ ] Implement `adamantium fmt`
+29. [ ] Implement `adamantium doctor`
+30. [ ] Implement VS Code syntax highlighting
+31. [ ] Implement the Adamantium LSP
+32. [ ] Remove the Windows linker dependency
+33. [ ] Complete cross-platform behavior
+34. [ ] Complete release infrastructure
+35. [ ] Freeze the core language
+36. [ ] Write the complete language specifications
+37. [ ] Design async
+38. [ ] Implement `adamantium-async`
+39. [ ] Integrate async with the compiler
+40. [ ] Perform the complete security audit
+41. [ ] Prepare Adamantium 1.0
+
