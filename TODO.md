@@ -1407,7 +1407,7 @@ The recommended implementation order is:
 14. [x] Modules / `pack` / `use`
 15. [x] Classes
 16. [x] Enums
-17. [ ] Memory-safety model
+17. [x] Memory-safety model
 18. [x] Alias system - core value and symbol aliases
 19. [x] NASM code generation
 20. [x] Linker integration
